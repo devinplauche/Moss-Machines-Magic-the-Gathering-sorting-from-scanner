@@ -181,8 +181,7 @@ void DetermineAction() { //Figure out what to do
   } else if (Tempval1 == "CalibrateX2") {Move4(1,1,5,0);
   } else if (Tempval1 == "CalibrateY1") {Move4(0,0,0,5);
   } else if (Tempval1 == "CalibrateY2") {Move4(0,1,0,5);
-  } else if (Tempval1 == "HomeButton") {Homemachine);
-  
+  } else if (Tempval1 == "HomeButton") {Homemachine();
   } else if (match = 1){match = 0;}else{ForLoop(1, 34);} // Handle everything else
 }
 
