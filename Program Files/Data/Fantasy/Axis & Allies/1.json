@@ -1,0 +1,14 @@
+{
+  "31541": {
+    "r_phash": "d7aa607c8603952b2bf86683fc8463d4423f8f449b98a873b48eb7cca3716f26",
+    "g_phash": "dfab607c8603952b2bf86683bc846394423faf449b88a873b4ceb7dca3716626",
+    "b_phash": "dfab607c8701942b2bfc6683b4846394423faf449b88a873b4ceb7dca3716e26",
+    "name": "Bazooka"
+  },
+  "31545": {
+    "r_phash": "ea2bc768a5640eddd5a1781893b7f3a8921237779e72708293ea3580da1d3adc",
+    "g_phash": "ea2bc768a5650eddd5a1781893b7f3a8921237759e72708293ea3184da1d3adc",
+    "b_phash": "e82bc7e8a5750f95d5a2701a93b7f3a8921235759c7270829bea338cda1d32dc",
+    "name": "M3 Light Tank"
+  }
+}

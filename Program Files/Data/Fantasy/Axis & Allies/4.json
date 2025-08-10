@@ -1,0 +1,38 @@
+{
+  "31381": {
+    "r_phash": "b3ced3304db385c3c70d946efc31187fe8e24bcbe4c11e2691463eb6814c6cd9",
+    "g_phash": "b3ced3384db285c3c70d946efc31187fe8e24bcbe4c11e2691463eb6854c68d9",
+    "b_phash": "b3ced3384db985c3c31d946cbc31187fe8c24aebe4c11e2691463fb6874c68d9",
+    "name": "Bold Captain"
+  },
+  "31398": {
+    "r_phash": "ee2e9c1f80d73763b74170aa2d3cca9f38510bd9b346786d973af0679c881990",
+    "g_phash": "ee2e9c0f80d73762b54070aa2d7cca9f78710bd9b346786d973ef0679c880b90",
+    "b_phash": "fe2e9c0f80d73763b54070aa2d7cca9b78730bd9b342786d873ef0679c880b90",
+    "name": "Hunting Sniper"
+  },
+  "31404": {
+    "r_phash": "feee1bbba74d84b2c9b2b4442cd9489bd16660c979b37e60d0416226b23db659",
+    "g_phash": "feee1bbba74d84b2c9b2b4442cd94893d16664c979337e60d0416226f23db659",
+    "b_phash": "fe6e1bbba74d84b2c9b2b4442cd948b3d16660c979337e6498416226727db659",
+    "name": "Quad 50"
+  },
+  "31405": {
+    "r_phash": "daaad24289ed6a29b1f70f91b80da1f4ce0c05f17381945f7d7026ceccd4a667",
+    "g_phash": "daaa520289ed6a29b1f70f91bc1da1f4ce0e01f47381945f7d7026ceccd4b647",
+    "b_phash": "daaa720283ed6a29b1f70f91b81da1f5ce0c81f07301945f7dc026cecc5ce6e7",
+    "name": "20mm Flak 38"
+  },
+  "31418": {
+    "r_phash": "e593e6184e6598c7760c8777d69207d9e26317cee94138e6a9665a78905c786e",
+    "g_phash": "e593e2184e6598c7760c8777c69a07d9e26317cee94938e6a9665a78905c7a66",
+    "b_phash": "e59ae2184e6598c7764c8737c69207d9e66317cee9c1186689667a78925c7a6e",
+    "name": "Stalwart Lieutenant"
+  },
+  "31422": {
+    "r_phash": "eb09cbc1e057ccbc94b8ad78bdc215b81b43e2a5972bb586d42d667a8334364d",
+    "g_phash": "eb194bc1e0d7ccbc95b8ad789d4215b81b43e2a5972bb586d02d667a8334b64d",
+    "b_phash": "eb09cbc1e057c8b895baad78bd4215a81b43e2b5972bb5a6d02d267ac374364d",
+    "name": "Type 89A Chi-Ro"
+  }
+}

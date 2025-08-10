@@ -1,0 +1,47 @@
+{
+  "620228": {
+    "r_phash": "811d8277744d75ae24900ff19723db084b4e9ca578b9807129ceb75e1eafb0f9",
+    "g_phash": "85118e714c4dcd2e24929ad3b333170c664c5ae59abbc83959e7cdce4e8f94f1",
+    "b_phash": "889a98d3d9cdcd6c2d849ac262b33618e48f6ac1a71b9c3959a1cd37cf8f96d0",
+    "lowPrice": "10.76",
+    "midPrice": "10.87",
+    "highPrice": "11.99",
+    "marketPrice": "",
+    "subTypeName": "Foil",
+    "extRarity": "Promo",
+    "extNumber": "AC1-026",
+    "extColor": "Green",
+    "extCardType": "Clashground",
+    "name": "New York City (Alternate Art)"
+  },
+  "620230": {
+    "r_phash": "9d6d89ab68c1ce762c04aca7d122934e3dceb71946318c29d3e693c42b53ed37",
+    "g_phash": "9d7f9f7968c10a463c25fc27d1a2934c2fce351d12319c69d2e653c44a53cc3b",
+    "b_phash": "dffddbed29638c760c049831d069974c2f0eec33603308bdd2e793e16a51ccb2",
+    "lowPrice": "",
+    "midPrice": "",
+    "highPrice": "",
+    "marketPrice": "",
+    "subTypeName": "",
+    "extRarity": "Promo",
+    "extNumber": "AC1-028",
+    "extColor": "Green",
+    "extCardType": "Clash",
+    "name": "Magnate, Cunning Planner (Alternate Art)"
+  },
+  "620232": {
+    "r_phash": "e444a43e0589bbe643110749bed6f39007cceaec3ab384d54e3f90bf51f7c22c",
+    "g_phash": "a424e0be01a9bba743b10749bed2f3d087cc2beca2bba4d50e2f90b791f7e02c",
+    "b_phash": "ac8a42b28158fea243018521bebeeb40d7be8a687aa3add56aba00be7f57a8ad",
+    "lowPrice": "",
+    "midPrice": "",
+    "highPrice": "",
+    "marketPrice": "",
+    "subTypeName": "",
+    "extRarity": "Promo",
+    "extNumber": "AC2-T02",
+    "extColor": "Red",
+    "extCardType": "Token",
+    "name": "War Minion (Gold)"
+  }
+}

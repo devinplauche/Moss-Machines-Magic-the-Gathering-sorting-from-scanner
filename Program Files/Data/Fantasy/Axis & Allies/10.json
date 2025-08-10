@@ -1,0 +1,362 @@
+{
+  "31227": {
+    "r_phash": "cfcba8fcb03457034fcba8fcb03457034bcea87c34315693c9cea86c36319793",
+    "g_phash": "cfcba8f8b03457034fcba8fcb03457034bcea87c34315693cbcea96c36319693",
+    "b_phash": "cfcba8f8b03457034fcba8fcb03456034bcea97cb4315693c9cea96c36319693",
+    "name": "HMAS Arunta"
+  },
+  "31228": {
+    "r_phash": "cd8fb8d0b270472f4dcfb8d0b230472f4dcef8d836310733c9ccf80c263187f3",
+    "g_phash": "ed8ff8d09270070d4dcff8d0b230070f4dcef8d8343107a7dbcef80c243197f3",
+    "b_phash": "e58fd8f09270270d6dcfd8f0b230070f4fcef8f824310687dbcaf80c243597f3",
+    "name": "HMCS Haida"
+  },
+  "31229": {
+    "r_phash": "a726d662d8d9298c2726d673d8d9298c2326d6739cd9298ce3a6d6731e59298e",
+    "g_phash": "a726d672d8d9298c2726d673d8d9298c2326d6739cd9298ce3a6d6731c59298e",
+    "b_phash": "a726d672d8d9298c2726d673d8d9298c2726d6739cd9298ce3a6d6731c19298e",
+    "name": "Casabianca"
+  },
+  "31230": {
+    "r_phash": "a673f333d98c0ccc3671f333c98f0cccb670f33241870ccdbe78d3124187a47d",
+    "g_phash": "a673f333d98c0ccc2671f333c98f0cccb670f33249870ccdbe78d3124187a47d",
+    "b_phash": "a673f333d98c0ccc2671f333c98f0cccb670f33349870ccdbc78d3124187a47d",
+    "name": "Dunkerque"
+  },
+  "31231": {
+    "r_phash": "b231e139cdce1ec63231e139cdce1ec6be31e17941c63e86be78c1790386be06",
+    "g_phash": "b231e139cdce1ec63231e139cdce1ec6be31e13941cf3e86be78c1790386b606",
+    "b_phash": "b231e139cdce1ec63231e139cdce1ec6be31c13941cf3e86be78c1790387b606",
+    "name": "Jean Bart"
+  },
+  "31232": {
+    "r_phash": "ea92cad0956d35296a92cad6856e3529fa91cad605663d2bfa99c2d42346bb2b",
+    "g_phash": "ea92cad0956c35296a93cad2956e3529fa91cad605663d2bfa99c0d42346fb2b",
+    "b_phash": "ea92cad0956d352d6a92cad2956e3529fa91cad405663d2bfe99c0d42146ff0b",
+    "name": "Hr. Ms. De Ruyter"
+  },
+  "31233": {
+    "r_phash": "ed9ea49992e15b666d0ea49910d15b66eb2ca4d114d3f71eeb640861349be79a",
+    "g_phash": "ed9ea49992e15b666d0ea49912d15b66eb24a4d114d3ff1eeb640861349be69a",
+    "b_phash": "ed9ea49992615b666d0ea49910d15b66eb2ca4d1149b7f1eeb641861349be79a",
+    "name": "Hr. Ms. Van Galen"
+  },
+  "31234": {
+    "r_phash": "f39383338c6c7ccc739383338c6c7ccc739b8b334a3034ccb4cecd335b3132cc",
+    "g_phash": "f39393338c6c7ccc739383338c6c7ccc73938b334a3034ccb4cecd335b3132cc",
+    "b_phash": "f39393338c6c7ccc739383338c6c7ccc71938b334a3074ccb4cecd335b3132cc",
+    "name": "Hr. Ms. Zvaardvisch"
+  },
+  "31235": {
+    "r_phash": "acbe6cbae222834693feb1c1b101f51e9dde1c9acc1049bc63cd43c1a243b6fd",
+    "g_phash": "acbc6cbae223836693fcb1c1b101b51e9dde1c9acc1849bc63cd43c1a243b6fd",
+    "b_phash": "acbe6cbae222836693f6b1e1b101b51e9dde1c9acc1849bc63cd43c1a243b4fd",
+    "name": "Barracuda Mk. II"
+  },
+  "31236": {
+    "r_phash": "e89b2cbb85838786d300f3287a763f763f6d4bed0a8d4ad8a004a125e7a595db",
+    "g_phash": "ea9b2cbb85838786d300f3287a363f763f6d4bed0a8d4ad8a004a125e7a595db",
+    "b_phash": "e89b2cbb85838786d300f3287a763f763f6d4bed0a8d4ad8a00ca125e3a595db",
+    "name": "Halifax GR Mk. V"
+  },
+  "31237": {
+    "r_phash": "8fe19f01f01e407e0fe19f81f00f603eb1f09fc10e07781ff1f887f82e07f807",
+    "g_phash": "8fc1bf81f01e407e0fe19f81f00f603eb1f09fc10e07781ff1f887f82e077807",
+    "b_phash": "8fa1bf81f01e407c0fe19f81f00f603eb1f09fc14e07781ff1f887f82e077807",
+    "name": "HMS Fencer"
+  },
+  "31238": {
+    "r_phash": "b1b1f9d9ce4e062631b0f9d9ce4f06263030f9d9cdcf0627b230f9d849cf0627",
+    "g_phash": "b1b1f9d9ce4e062631b0f9d9ce4f06263030f9d9cdcf0627b230f9d849cf0627",
+    "b_phash": "b1b1f9d9ce4f062631b0f9d9ce4f06263030f9d9cdcf0626b230f9d849cf0627",
+    "name": "HMS Illustrious"
+  },
+  "31239": {
+    "r_phash": "adf0f0c2920f0e396df0f1c6922e0e39e9c9f1e617364c8be8cb133c1734ecc3",
+    "g_phash": "adf0f0c2920f0e396df0f1c6922e0e29e9c9f1f617364c8be8cb133c1734ecc3",
+    "b_phash": "adf0f0c2d20f0f396df0f0c6922e0e39e9c9f1e617364c8be8c9132c1734fcc3",
+    "name": "HMS Jamaica"
+  },
+  "31240": {
+    "r_phash": "fa0fbb0485f044a37a0fbb4cc4f044a33b0bbb4cc4f444b2bb6abf4d649570b6",
+    "g_phash": "fa0ebb4485f044a37a0fbb5cc4f044a33b0bbb4cc4f444b2bb4bbf4d649560b6",
+    "b_phash": "fa0ebb4485f044a37a0fbb5cc4f044b33b0bbb4cc4b444b29b6bbf49649570b6",
+    "name": "HMS Kent"
+  },
+  "31241": {
+    "r_phash": "b9b4f1b4c64b0e4b3934f1b4c6cb0e4b3934e1b4c6c91f4bbb36a03444c85fcd",
+    "g_phash": "b9b4e1b4c64b0e4b3934f1b4c6cb0e4b3934f1b4c6c91f4bbb36a03444c85fcd",
+    "b_phash": "b9b4e1b4c64b0e4b39b4f1b4c6cb0e4b3934e1b4c6c91ecbb936a03644c85fcd",
+    "name": "HMS King George V"
+  },
+  "31242": {
+    "r_phash": "b8b3b163c74c4e8c383bb173c7c64e8c3838913345c76ecebe18913941a7eec6",
+    "g_phash": "b8b3b163c74c4e8c3839b173c7c64e8c3838913345c76ecebe38913941a7eec6",
+    "b_phash": "b8b3b063c74c4e8c3839b173c7c64e8c3838907345c76ecebe38903949a7efc6",
+    "name": "HMS Warspite"
+  },
+  "31243": {
+    "r_phash": "fb8a3f8a2eeac4e0c0f6c17ea11fb3953d146e514c615ca172a3528a5ace0fce",
+    "g_phash": "fb823f8b2ceac4e0c0f6c17ea13fb3953d146e500c617ca172a352875ace0fce",
+    "b_phash": "fb823f8a2ceac4e0c0f6c17ea13db3953f146e500c615ca172a352af5ace0fce",
+    "name": "Beaufighter"
+  },
+  "31244": {
+    "r_phash": "bceb79e3d9e796b4d430e403650a611843984bdc9f9c0e1c3e379cf3f1c1a168",
+    "g_phash": "bceb79e3d1e796b4d430e403650a6118c39843dc9f9c4e1c3e379af3f1c1a168",
+    "b_phash": "bceb39e3d1e79694d430e403650a6118c39c43dc9f9c0e1e3e379cf3f3c1a168",
+    "name": "B-25H Mitchell"
+  },
+  "31245": {
+    "r_phash": "be9c6296c272cf209f2e31cfa1efe4789c0858dc49d643d3679bf29e728c1680",
+    "g_phash": "ae9c6296c2728f209f2e33cfa1cfe4789c1858dc09d643d3679bf31f768c1680",
+    "b_phash": "ae9c6296c2738f209f2e33cfa5cfe4789c0058dc09d643d3679bf31f768c1680",
+    "name": "F6F-3 Hellcat"
+  },
+  "31246": {
+    "r_phash": "c3ca25e68eb5de10d92879ad3855344b142f4e968a96a1def16b97a51ad90fc8",
+    "g_phash": "c3ca25e68eb5de10d92879ad3855344b142f4e9e8a96a1def16b97a55a590f48",
+    "b_phash": "d3ca25e68eb5de12db2879ad38d5344b042b4e1c8a9621def16b97a55a590fc8",
+    "name": "TBF Avenger"
+  },
+  "31247": {
+    "r_phash": "ed9bac9692645269699bad96966452696999ad9696665269e919ad9616e65269",
+    "g_phash": "ed9bac9692645269699bad96966452696999ad9696665269e919ad9616e65269",
+    "b_phash": "ed9bac9692645269699bad96966452696999ad9696665269e919ad9616e65269",
+    "name": "USS Archerfish (SS 311)"
+  },
+  "31248": {
+    "r_phash": "e26e96649d91699b226c96444d9269bbb271d64c4dcea933b23357cc4dcca837",
+    "g_phash": "e6ec966699136999226c96644d9269bbb271d64c4dcea933b23356cc4dcca837",
+    "b_phash": "e6ec966699136999266c96644d9269bbb273d64c4dcca933b23357cc4ccca833",
+    "name": "USS California (BB 44)"
+  },
+  "31249": {
+    "r_phash": "e59cf28c9a630d73659cf28c92631d77edbcc280125b3c7feda44300125bbccd",
+    "g_phash": "e59cf28c9a630c73659cf38c92631c77edbcc380125b3c7feda44300125bbccd",
+    "b_phash": "e59cb38c9a634d73659cf38892631c77edacc380125b3c7feda44300125bbccd",
+    "name": "USS Cleveland (CL 55)"
+  },
+  "31250": {
+    "r_phash": "cb9be004b4641fbb4b9be044b4640fabcb1bf0143ce50f6fc218f8902de7876f",
+    "g_phash": "cb9be044b4641fbb4b9be044b4640fab4b1bf0543ce50f6bc218f8902de7876f",
+    "b_phash": "cb9be044b4641fbb4b9be044b4640fab4b1bf0543ce50f2fc218f8902de7876f",
+    "name": "USS Hoel (DD 533)"
+  },
+  "31251": {
+    "r_phash": "fc9aae19836151e66e3ea41911c17b648b3e958376e0ea7c8c0d358ddbb6c952",
+    "g_phash": "fc9aae19836151e66e3ea49911c17b64cb3e958376e0ea3c8c0d358fcbb6c862",
+    "b_phash": "fc9aae19836151e66e3ea41911c17b64cb3e958372e0ea3c8c0d35cfcbb6c872",
+    "name": "USS John C. Butler (DE 339)"
+  },
+  "31252": {
+    "r_phash": "e984ed34967316db698cad2416677acbe99a85fc1625eb00e9da16fb5625c904",
+    "g_phash": "e984ed34967312db698cad2416677acbe99a85fc1625eb00e9da16fb5625e904",
+    "b_phash": "e984eda4967312db698cad2416677acbe99a85fc1625eb00e9da16fb5625e904",
+    "name": "USS Laffey (DD 724)"
+  },
+  "31253": {
+    "r_phash": "b663d472c99c2b8d3663d472c99c2b8d3673d472498c2f8db673c276098c3d89",
+    "g_phash": "b663f472c99c2b8d3663d472c99c2b8d3673d472498c2f8db673c076098c3d89",
+    "b_phash": "b663f472c99c2b8d3663d472c99c2b8d3673d472498c2f8db673c076098c3d89",
+    "name": "USS Missouri (BB 63)"
+  },
+  "31254": {
+    "r_phash": "eb798d42948472bd6b7b8d52948472ad6b7b9952168426edc95bfb1276a484e4",
+    "g_phash": "eb798d42948472ad6b7b8d52948472ad6b7b9952168426edc95bfb1276a484ec",
+    "b_phash": "eb7b8d42948472ad6b7b8d52948476ad6b7b8952148426ede95bf91236e484ec",
+    "name": "USS San Francisco (CA 38)"
+  },
+  "31255": {
+    "r_phash": "b063b0e7cf984f183067b0e3cd9a4f1c3264b0e34dc34d9db23cb3724dc70c8f",
+    "g_phash": "b063b0e7cf9c4f183067b0e3cd9a4f1c3264b0e34dc34d9db23cb2724dc70c8f",
+    "b_phash": "b063b0e7cf9c4f183067b0e3cd9a4f1c3264b0e34dc34d9db23cb2724dc70c8f",
+    "name": "USS Yorktown (CV 5)"
+  },
+  "31256": {
+    "r_phash": "b678f678c98709873678f678c98709873678f678c3870987bc38f67843c50987",
+    "g_phash": "b678f678c98709873678f678c98709873678f678c3870987bc38f67843c50987",
+    "b_phash": "b678f678c98709873678f678c98709873678f678c3870987bc38e67843c51987",
+    "name": "USS Saratoga (CV 3)"
+  },
+  "31257": {
+    "r_phash": "e94de92d96b216d269cde92d963216d269c9e12d16361ed2acd9e12d53249ed2",
+    "g_phash": "e94de92d96b216d269cde92d963216d269c9e12d16361ed2acd9e12d53249ed2",
+    "b_phash": "e94de92d96b216d269cde92d963216d269c9e12d16361ed2acd9e12d53249ed2",
+    "name": "Admiral Hipper"
+  },
+  "31258": {
+    "r_phash": "e96ce925969316da696ce925969116da696ee925469914dab1e6cf254e1938da",
+    "g_phash": "e96ce925969116da696ce925969116da696ee925469916dab1e6cf254e1938da",
+    "b_phash": "e96ce925969316da696ce925969116da6966e925469916dab1e6cf254e1938da",
+    "name": "Admiral Scheer"
+  },
+  "31259": {
+    "r_phash": "d29a2ddb8c638e65ca54c348630872843590bc529d771ab75bae13eb376da555",
+    "g_phash": "d29e2ddb84679ea5ca54c34a630872803510fc509c751af65bae0bef376da555",
+    "b_phash": "d3de29db84679ca5ca44c34a630872803510fc509c651af65bee03ef37fda555",
+    "name": "Bf 109"
+  },
+  "31260": {
+    "r_phash": "b39cb118cc634c66339cb319cc3b4ce636e4b319c31b4cf2bce4b12f43194f99",
+    "g_phash": "b39cb118cc634c66339cb319cc3b4ce636e4b319c31b4cf2bce4b32f43194d99",
+    "b_phash": "b39cb118cc634ce6339cb319cc3b4ce636e4b119c31b4cf2bce4b12f43194f99",
+    "name": "Graf Zeppelin"
+  },
+  "31261": {
+    "r_phash": "cacdead5b532152a6acdead59133150a6cccea751333158aedcca27d1233dd82",
+    "g_phash": "cacdead5b532152a6acdead59133150a6cccea751333158aedcca27d1233dd82",
+    "b_phash": "caccead5b533152a6accead59533158a6cccea751333158aedcca27d1233dd80",
+    "name": "Karlsruhe"
+  },
+  "31262": {
+    "r_phash": "957b22d7eaa2c5288d409b053aad317e667f6cd560c22380c702ae3dde7fdcc8",
+    "g_phash": "957b22d7eaaac5288d409b053aad317a667f6cd560c22380e700ae3dde7fdcc8",
+    "b_phash": "957b22d7eaa2c52a8d4099053aad317e667f6cd560c223807700ae3dde7fdcc8",
+    "name": "S-Boat"
+  },
+  "31263": {
+    "r_phash": "e6f7f04999080fb664f7f04993180fb62c63f449539c0bb6b823e63947dc18ce",
+    "g_phash": "e6f7f04999081fb664f7f04993181fb62c63f449539c1bb6b823e63946dc184c",
+    "b_phash": "e6f7f04999081fb664f7e04993981fb62c67e449539c1bb6a823e63946dc18cc",
+    "name": "Tirpitz"
+  },
+  "31264": {
+    "r_phash": "f66c866789937999366c8666c9937999366c866649833999b67cc66649c73998",
+    "g_phash": "f66c8666c9937999366c8666c9937999366c866649833999b63cc66749c73998",
+    "b_phash": "f66c8666c9937999366c8666c9937999366c866649833999b67cc66649c73998",
+    "name": "U-66"
+  },
+  "31265": {
+    "r_phash": "cb12ae4ab4ed51a54b10ae4ab4eb51b5eb35ae4a14da5335eb251cca31dacb15",
+    "g_phash": "cb12ae4ab4ed51a54b10ae4ab4eb51b5eb35ae4a14da5335eb253cca31dacb11",
+    "b_phash": "cb12ae4ab4ed51a54b10ae4ab4eb51b5eb35ae4a14da5335eb251cca31dacb15",
+    "name": "Z18 Hans Ludemann"
+  },
+  "31266": {
+    "r_phash": "da9a2d1aa42896b5ca75db4a61af7185259724d28c630adb4b998f29b73db724",
+    "g_phash": "d89a2d1aac2896b5da75d34a61af718525d724d38c430ad34b998f29b735b764",
+    "b_phash": "d89a2d1aac389675da74d34a61ad61a525d724d29cc31ad34b898f29b765b764",
+    "name": "C.202 Folgore"
+  },
+  "31267": {
+    "r_phash": "d8e5a78ea71a587158e5a78ea71a5871d8e5a78e06525863f9ad279c0056d967",
+    "g_phash": "d8e5a78ea71a187158e5a78ea71a5871f8e5a78e06525863f9ad279c0056d967",
+    "b_phash": "d8e5a38ea71a587158e5a78ea71a5871f8e5a78e06d25863f9ad27980056d967",
+    "name": "Eugenio di Savoia"
+  },
+  "31268": {
+    "r_phash": "a6cba40fd9345bf026cba40bd8345bf4a7c3841b587c6b64a58394995a7cab67",
+    "g_phash": "a6cba40fd9345bf026cba40bd8345bf4a7c3841b587c6b64a58394995a7cab67",
+    "b_phash": "a6cba40fd9345bf026cba40bd8345bf4a7c3841b587c6b64a58394995a7cab67",
+    "name": "Giulio Cesare"
+  },
+  "31269": {
+    "r_phash": "e7fba4d198041b2667fba4d198040b2e67f9b4d19c0e6beea1f094105e0f6be9",
+    "g_phash": "e7fba4d198041b2667fba4d198040b2e67f9b4d19c0e6beea1f094105e0f6be9",
+    "b_phash": "e7fba4d198041b2667fba4d198040b2e67f9b4d19c0e6beea1f094105e0f6be9",
+    "name": "Littorio"
+  },
+  "31270": {
+    "r_phash": "fa2b6a2b04aac0fdc0d4914a3d253e052d576d51857d43f442fe5ada588fd48f",
+    "g_phash": "fa2b6a2b04eac4fdc0d4915a3d273e052d576d51857d43f442f61a9a588fd487",
+    "b_phash": "fa2b6a2b04aac4fdc0d4915a3d2f3e072d536d51857d43f4427e5a9a588fd087",
+    "name": "SM. 79 Sparviero"
+  },
+  "31271": {
+    "r_phash": "e974dd27968b02586974dda796cb0258e934f5a716cb0a58e83675a317c9ca5c",
+    "g_phash": "e974dd27968b02586974dda796cb0258e934f5a716cb0a58e83675a317c9ca5c",
+    "b_phash": "e974dd27968b02586974dda796cb0258e934f5a716cb0a58e83675a317c9ca5c",
+    "name": "Ugolino Vivaldi"
+  },
+  "31272": {
+    "r_phash": "ecc6eda6933912596cc7e58693381a796cc7e58613301a79fccfe5c703301a3c",
+    "g_phash": "ecc6ed86933912596cc7ed8693381a796cc7e58613301a79fccfe5c703301a3c",
+    "b_phash": "ecc6ed86931912596cc6ed8693381a796cc7e58613301a79fccfe5c703341e3c",
+    "name": "Zara"
+  },
+  "31273": {
+    "r_phash": "ac8968a9e0a9ce3ede3e975237433116a172e97399654b45224c427c66f5e6b5",
+    "g_phash": "ac8968a9e0adce3ede3e974237d33116a132e97199654b45224cc27c66f5a6b5",
+    "b_phash": "ac8968a9e0adce3ede3e97523743311ea132e97399654b45224c427c66f5a6b5",
+    "name": "A6M2 Zero Kamikaze"
+  },
+  "31274": {
+    "r_phash": "cf5bea58b0a414a34f5beb5cb0a414a34f5beb58b0a415a74e5bea5839a415a7",
+    "g_phash": "cf5bea58b0a414a34f5beb5cb0a414a34f5beb58b0a415a74e5bea5839a415a7",
+    "b_phash": "cf5bea58b0a414a34f5beb5cb0a414a34f5beb58b0a415a74e5bea5839a415a7",
+    "name": "Akitsuki"
+  },
+  "31275": {
+    "r_phash": "e3c66533cf33da72924c149c999c99cf3967cc31a4b3662636a49c99c98b6927",
+    "g_phash": "e3c66533cf31da7392cc148c999c99cf3d63cc3124b7762636a49c99c98b2927",
+    "b_phash": "e3c66533cf31da7292cc148c999c99cf3d67cc3126b3762636a49c99c98b2927",
+    "name": "D4Y1 \"Judy\""
+  },
+  "31276": {
+    "r_phash": "ff2a3d2a847bc17b8185b2946a016a2c68bedaeb1feb1fe207d2415fc15c823c",
+    "g_phash": "ff0835aa84f3c173819532956e416a2c78bedaca1fe31fe307d3415dc15c863c",
+    "b_phash": "ff2a3daa847bc1738185b2956a416a2c78bedaea1fe31fe207d2415dc15c823c",
+    "name": "H8K1 Type 2 \"Emily\""
+  },
+  "31277": {
+    "r_phash": "bc78c864c387378b3c78c874c387378bbc78c8704387378efc59486133aab796",
+    "g_phash": "bc78c864c387378b3c78c874c387378bbc78c8704387379efc58486133a2b79e",
+    "b_phash": "bc78c874c387378b3c78c874c387378bbc78c8704387378efc58486133a2b79e",
+    "name": "Haruna"
+  },
+  "31278": {
+    "r_phash": "f72c807388d37f8c772c807388d37f8cb70c80734cb3778ca24c88735db3f70c",
+    "g_phash": "f72c807388d37f8c772c807388d37f8cb70c80734cb3778ca24c88735db3f70c",
+    "b_phash": "f72c807388d37f8c772c807388d37f8cb70c80734cb3778ca24c88735db3f70c",
+    "name": "I-26"
+  },
+  "31279": {
+    "r_phash": "ca85bad6b55a55294ba5bad6345a4729dba5bcd6245a4321ffa72cda4050d325",
+    "g_phash": "ca85aad6b57a55294ba5aad6345a4729dba5bcd6245a5321ffa72cda4050d325",
+    "b_phash": "ca85bad6b47a55294ba5aad6245a5729dba5acd6045a5321ffa72cda5050d3a5",
+    "name": "Isokaze"
+  },
+  "31280": {
+    "r_phash": "ba33f733c5cc08cc3a37f733c5c808cc3a67f7734198088cbcc7d57342352b8c",
+    "g_phash": "ba33f733c5cc08cc3a37f733c5c808cc3a67f7734198088cbcc7d57342352b8c",
+    "b_phash": "ba33f733c5cc08cc3a37f733c5c808cc3a67f7734198088cbcc7d57342352b8c",
+    "name": "Musashi"
+  },
+  "31281": {
+    "r_phash": "e948e98d96b716726948e98d9635167269dae98d16251432e9daeac9166db536",
+    "g_phash": "e948e98d96b716726948e98d9635167269dae98d16251432e9daeac9166db536",
+    "b_phash": "e948e98d96b716726948e98d9635167269dae98d16251432e9daeac9166db536",
+    "name": "Nachi"
+  },
+  "31282": {
+    "r_phash": "af61c103d09e3efc2f61c103d09e3efc2f61c10b509e3ef0af61c10f509f3ef0",
+    "g_phash": "af61c013d09e3efc2f61c103d09e3efc2f61c107509e3ef0af61c10f509f3ef0",
+    "b_phash": "af61c113d09e3efc2f61c103d09e3efc2f61c103509e3ef8af60c10f509f3ef0",
+    "name": "Yahagi"
+  },
+  "31283": {
+    "r_phash": "be1c9d1fc1e362e03e1c9d1f41a366e0fe54991b05abeec4f85511aa2722ee15",
+    "g_phash": "be1c9d1fc1e362e03e1c9d1f41a366e0fe54991b05abeec4f85511aa2722ee15",
+    "b_phash": "be1c9d1fc1e362e03e1c9d1f41a366e0fe54991b05abeec4f85511aa2722ee15",
+    "name": "Yamashiro"
+  },
+  "31284": {
+    "r_phash": "9c1ebc3ee3e143c01c1ebc3fe3a043c01c5fbc3fc3b443c07c43bc3f9f1c43c0",
+    "g_phash": "9c1fbc1ce3e043c11c1fbc3ee3a043c13c5fbc3ec3b443c13c43bc1f9d3c43e0",
+    "b_phash": "9c5ebc3ee3a143c01c5ebc3fe3a043c01c5fbc3fe3b443c03c43bc3f991c43e0",
+    "name": "Zuikaku"
+  },
+  "31285": {
+    "r_phash": "b26af266cd950d99323af366cdcd1c99b030c3660e6e3c99f19103860e6ffc71",
+    "g_phash": "b26af366cd850c99323ae366cdcd1c99b130c3660e6e3c99f19103c60e6ffc71",
+    "b_phash": "b26af266cd851c99323ae366cdcd1c99b1b0c3660e6f3c99f19103060e6ffc71",
+    "name": "USS Massachusetts (BB59)"
+  },
+  "31286": {
+    "r_phash": "aff26b727a1ed83dd08d928d87d0277127776d073d0ed92c78795868424ac2d2",
+    "g_phash": "aff26b727a1e983dd08d928d8790277127776d073d0ed92c78795869424ac2da",
+    "b_phash": "aff26b72fa1e983dd0c5928d87d0277127776d073d0ed908787b586b424ac2c2",
+    "name": "Ju-87 R2 Picchiatelli"
+  }
+}
