@@ -1,0 +1,419 @@
+Moss Machine — Python Software Explanation
+
+This document explains the Python software components that drive the Moss Machine card sorting system. The main components are `optimized_scanner.py` (recognition engine), `gui_interface_enhanced.py` (user interface), and supporting utilities.
+
+═══════════════════════════════════════════════════════════════════════════════
+1. OPTIMIZED_SCANNER.PY — Core Recognition Engine
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE
+Recognizes trading cards from images using perceptual hashing (pHash) and matches them against a SQLite database containing 317 games and hundreds of thousands of cards.
+
+KEY FEATURES
+- Multi-threaded scanning: scans multiple games in parallel using ThreadPoolExecutor
+- Three-channel perceptual hashing: computes separate hashes for R, G, B channels for better accuracy
+- Early termination: stops scanning when exact match (distance = 0) is found
+- Hash caching: preloads popular games (Magic, Pokemon, YuGiOh) into memory for faster lookups
+- Adaptive thresholds: progressively tightens matching threshold to find best results
+- Filter support: can limit scans by game, set, rarity, foil type
+- Serial communication: sends bin assignments to Arduino for physical sorting
+- Inventory tracking: optional duplicate rejection by maintaining a collection file
+
+HOW IT WORKS (recognition flow)
+
+1. Image input (from file or webcam frame)
+2. Compute perceptual hash for each RGB channel → produces (r_hash, g_hash, b_hash)
+3. Launch parallel threads to scan each active game's database table
+4. For each card in database:
+   - Quick filter: check if Hamming distance is < 50 (fast rejection)
+   - Compute exact distance: sum of distances across all three channels
+   - Track best matches in a priority queue
+5. Early termination: if any thread finds distance = 0, cancel other threads
+6. Return top N matches sorted by distance (lower = better match)
+
+PERCEPTUAL HASHING EXPLAINED
+
+Perceptual hashing (pHash) converts images into 64-bit fingerprints that are similar for visually similar images:
+- Resize image to 32x32, convert to grayscale
+- Apply Discrete Cosine Transform (DCT)
+- Keep low-frequency components (top-left 8x8 of DCT)
+- Threshold against median value → produces 64-bit hash
+
+For trading cards, we compute THREE separate hashes (R, G, B channels) because:
+- Color information matters (distinguishes foils, alternate arts, borders)
+- Red/green/blue channels capture different visual features
+- Final distance = r_distance + g_distance + b_distance
+
+Hamming distance measures how many bits differ between two hashes:
+- Distance 0 = identical images
+- Distance 1-5 = extremely close match (same card, different scan)
+- Distance 6-15 = likely same card (normal variation)
+- Distance 16-30 = possibly same card (need visual verification)
+- Distance 31+ = different cards
+
+MAJOR FUNCTIONS
+
+__init__(db_path, max_workers, cache_enabled, serial_port, baud_rate)
+- Initializes scanner with database connection
+- Sets up thread pool with configurable worker count (default 8)
+- Loads game list from database, maps display names to table names
+- Optionally preloads hash cache for popular games (uses ~500MB RAM)
+- Initializes serial connection for Arduino if port specified
+
+compute_phash(image)
+- Converts PIL Image to grayscale, resizes to 32x32
+- Applies DCT and threshold to produce 64-bit hash
+- Returns three hashes (r_hash, g_hash, b_hash) as integers
+
+scan_card(image, threshold, top_n, set_filter, foil_type_filter, rarity_filter)
+- Main entry point for card recognition
+- Computes hashes from image
+- Launches parallel scan across all active games
+- Collects results, sorts by distance, returns top N matches
+- Supports optional filtering by set/rarity/foil type
+
+scan_game(game_name, r_hash, g_hash, b_hash, threshold, found_exact, filters...)
+- Worker function executed in thread pool
+- Queries database table for the specified game
+- Computes distances for each card, tracks best matches
+- Returns early if exact match found and found_exact event is set
+- Applies SQL filters (set, rarity, foil type) if specified
+
+get_bin_color(card_info) / get_bin_mana(card_info) / get_bin_price(card_info) / etc.
+- Sorting logic: determines which tray/bin a recognized card should go to
+- Modes:
+  - color: W/U/B/R/G/Multicolor/Colorless/Land (8 bins)
+  - mana_value: CMC 0/1/2/3/4/5/6/7/8+ (9 bins)
+  - set: group by set code
+  - price: sort by market price with configurable threshold
+  - type: Creature/Instant/Sorcery/Enchantment/Artifact/Planeswalker/Land/Other
+  - rarity: Common/Uncommon/Rare/Mythic
+  - finish: Foil vs Non-foil
+  - alpha: A-Z alphabetical bucketing
+
+send_to_arduino(send_str)
+- Formats command with start/end markers: <command>
+- Encodes to bytes and writes to serial port
+- Used to send bin assignments like <tray7> or <RejectCard>
+
+recv_from_arduino()
+- Reads serial data byte-by-byte until end marker found
+- Returns decoded message string (e.g., "Arduino is ready")
+
+run_realtime_mode(sorting_mode, threshold)
+- Opens webcam, displays live feed in OpenCV window
+- Detects card contours using edge detection and contour finding
+- Extracts card region, applies perspective correction
+- Scans card, determines bin, sends to Arduino
+- Shows recognition results on-screen overlay
+
+PERFORMANCE OPTIMIZATIONS
+
+1. Thread pooling: processes multiple games simultaneously (8 workers default)
+2. Early exit: stops all threads when exact match found
+3. Quick filtering: rejects obviously bad matches using fast bit-count (Hamming < 50 threshold)
+4. Hash caching: stores all hashes for Magic/Pokemon/YuGiOh in RAM (avoids repeated DB queries)
+5. Batch queries: uses LIMIT in SQL to process results in chunks
+6. Connection pooling: thread-local database connections to avoid lock contention
+
+
+═══════════════════════════════════════════════════════════════════════════════
+2. GUI_INTERFACE_ENHANCED.PY — Graphical User Interface
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE
+Provides a Tkinter-based GUI for controlling the card scanner and Arduino hardware. Features live camera feed, parameter controls, CSV export, and Arduino monitoring.
+
+ARCHITECTURE
+Uses tabbed interface (ttk.Notebook) with three main sections:
+1. Scanner tab: camera settings, sorting mode, filters, game/set/rarity selection
+2. Arduino tab: serial connection, machine start/stop, motor controls, parameter upload/fetch
+3. Export tab: CSV file selection, auto-export toggle, scan history, statistics
+
+KEY COMPONENTS
+
+ScannerGUI.__init__(root)
+- Sets up main window (1650x950 pixels, dark theme)
+- Initializes OptimizedCardScanner instance
+- Creates camera canvas (600x540 for live feed)
+- Sets up variables: sorting mode, filters, auto-scan, inventory tracking
+- Initializes Arduino monitoring state
+
+_setup_gui()
+- Builds left panel (camera feed + start/stop/scan buttons)
+- Builds right panel (tabbed notebook with three tabs)
+- Connects button callbacks and event handlers
+
+_setup_scanner_tab(parent)
+- Sorting mode dropdown: maps user-friendly labels ("Color", "Mana Value") to internal keys ("color", "mana_value")
+- Price threshold entry: configurable dollar threshold for buy mode
+- Game/Set/Rarity/Foil filters: dropdowns populated from database
+- Inventory tracking checkbox: enables duplicate rejection
+- Status log: scrollable text widget showing recognition results and errors
+
+_setup_arduino_tab(parent)
+- Serial port and baud rate entry fields
+- Connect button: calls connect_arduino() to establish serial link
+- Machine state display: shows STOPPED (red) or STARTED (green)
+- Start/Stop machine buttons: send <StartMachine> / <StopMachine> commands
+- Motor toggles: manual control of Vacuum1, Vacuum2, Lights, X/Y/Z motors
+- Calibration buttons: CalibrateX1/X2/Y1/Y2 for fine positioning
+- Home button: triggers full homing sequence
+- Parameter upload/fetch: sync movement parameters between GUI and Arduino
+- Live monitoring toggle: starts background thread to poll sensor data
+
+_setup_export_tab(parent)
+- CSV file selector: choose destination for scan history export
+- Auto-export checkbox: write to CSV after every scan
+- Clear history button: reset scan counter and history list
+- Statistics display: total scans, unique cards, most common bin
+
+CAMERA AND SCANNING FLOW
+
+start_camera()
+- Opens cv2.VideoCapture(0) for webcam access
+- Starts _video_loop() in scheduled callback (10ms interval)
+- Enables stop button, disables start button
+
+_video_loop()
+- Reads frame from camera
+- If auto-scan enabled and cooldown expired:
+  - Calls _find_card_contour() to detect card in frame
+  - If card detected, calls _perform_scan()
+- Updates canvas with annotated frame
+- Reschedules itself via root.after(10, self._video_loop)
+
+_find_card_contour(frame)
+- Converts frame to grayscale, applies Gaussian blur
+- Runs Canny edge detection
+- Finds contours and filters by:
+  - Minimum area (> 50,000 pixels to ignore noise)
+  - Approximately rectangular (4 vertices after polygon approximation)
+- Returns largest qualifying contour or None
+
+_perform_scan(frame, card_approx)
+- Extracts card region using perspective transform
+- Calls scanner.scan_card() to recognize card
+- If recognized with confidence > threshold:
+  - Determines bin assignment using current sorting mode
+  - Checks inventory if tracking enabled (rejects duplicates)
+  - Sends bin command to Arduino if connected
+  - Adds to scan history
+  - Updates statistics display
+- If not recognized:
+  - Sends <RejectCard> to Arduino if connected
+- Draws result overlay on frame (card name, confidence, bin assignment)
+
+ARDUINO INTEGRATION
+
+connect_arduino()
+- Reads port and baud rate from entry fields
+- Calls scanner.init_serial() to establish connection
+- Waits for "<Arduino is ready>" message
+- Enables Arduino controls, updates connection status
+
+start_machine() / stop_machine()
+- Send <StartMachine> or <StopMachine> commands
+- Update machine state label (green STARTED / red STOPPED)
+- Enable/disable calibration buttons based on state
+
+toggle_motor(name)
+- Sends <SetMotor,MotorName,1> or <SetMotor,MotorName,0>
+- Toggles button color to show state (green = on, default = off)
+
+upload_params()
+- Reads parameter values from entry widgets (speed, Xcal, Ycal, pickup_threshold, etc.)
+- Sends multiple <SetParam,name,value> commands to Arduino
+- Only allowed when machine is stopped and at home position
+
+fetch_params()
+- Sends <QueryParams> to Arduino
+- Parses response and populates GUI entry fields with current firmware values
+
+toggle_arduino_monitoring()
+- Starts/stops background thread running _arduino_monitor_loop()
+- Thread sends <QuerySensors> every 0.5 seconds
+- Parses response and updates sensor display labels (range, endstops, home status)
+
+CSV EXPORT AND HISTORY
+
+_add_to_history(card_info, bin_result, sorting_mode)
+- Appends scan to self.scan_history list
+- If auto-export enabled, immediately writes to CSV file
+- CSV columns: timestamp, card_name, set_code, bin_assignment, sorting_mode, confidence
+
+export_csv_now()
+- Prompts user to select CSV file if not already chosen
+- Writes all scan_history entries to CSV with headers
+- Shows success message with row count
+
+SORTING MODE MAPPING
+
+The GUI uses friendly display labels in the dropdown, but internally stores mode keys:
+- "Color" → "color"
+- "Mana Value" → "mana_value"
+- "Set" → "set"
+- "Price" → "price"
+- "Type" → "type"
+- "Buy Mode" → "buy"
+- "Alpha (A-Z)" → "alpha"
+- "Rarity" → "rarity"
+- "Finish (Foil)" → "finish"
+
+When user selects a mode, _on_sort_selected() callback updates self.sorting_var.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+3. DATABASE STRUCTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+unified_card_database.db (SQLite3)
+
+Main tables:
+- games: list of supported games (id, name, display_name, total_cards)
+- cards_magic, cards_pokemon, cards_yugioh, cards_flesh_and_blood, etc. (317 tables total)
+
+Typical card table schema:
+- id (INTEGER PRIMARY KEY)
+- product_id (TEXT, indexed) — TCGplayer product identifier
+- name (TEXT) — card name
+- set_code (TEXT) — set abbreviation (e.g., "LEA", "M21")
+- rarity (TEXT) — Common/Uncommon/Rare/Mythic
+- r_phash, g_phash, b_phash (INTEGER) — perceptual hashes for RGB channels
+- price (REAL) — market price in USD
+- colors (TEXT) — color identity (JSON array or comma-separated)
+- types (TEXT) — card types
+- cmc (INTEGER) — converted mana cost / mana value
+- subTypeName (TEXT) — foil type (Normal, Foil, Etched, etc.)
+
+Indexes:
+- All tables have indexes on r_phash, g_phash, b_phash for fast hash lookups
+
+
+═══════════════════════════════════════════════════════════════════════════════
+4. TYPICAL WORKFLOWS
+═══════════════════════════════════════════════════════════════════════════════
+
+WORKFLOW 1: Manual Single-Card Scan
+1. Run: python optimized_scanner.py path/to/card.jpg
+2. Scanner computes hashes, scans all 317 games in parallel
+3. Displays top 10 matches with distances and confidence percentages
+4. User can add --game Magic to limit scan to one game
+5. User can add --threshold 5 for stricter matching
+
+WORKFLOW 2: Live Camera Sorting (Full Auto)
+1. User runs gui_interface_enhanced.py
+2. Clicks "Connect Arduino" (establishes serial link)
+3. Clicks "START MACHINE" (Arduino enters sorting mode)
+4. Selects sorting mode (e.g., "Color")
+5. Clicks "▶ Start" camera button
+6. Places cards under camera one at a time
+7. System auto-detects card, recognizes it, determines bin, sends command to Arduino
+8. Arduino physically moves card to correct tray
+9. Process repeats until user stops or overflow tray fills
+
+WORKFLOW 3: Inventory Tracking Mode
+1. Enable "Track Inventory (Reject Duplicates)" checkbox in GUI
+2. System maintains Collection/Collection.txt with list of owned cards
+3. When duplicate detected, sends <RejectCard> instead of bin assignment
+4. Allows building a collection while automatically filtering out cards you already own
+
+WORKFLOW 4: Parameter Tuning
+1. Connect to Arduino
+2. Click "Fetch Params" to load current firmware values
+3. Adjust speed, calibration multipliers, thresholds in GUI fields
+4. Click "Upload Params" to sync to Arduino
+5. Test movement with calibration buttons
+6. Iterate until movement is accurate and reliable
+
+
+═══════════════════════════════════════════════════════════════════════════════
+5. ADVANCED FEATURES
+═══════════════════════════════════════════════════════════════════════════════
+
+Hash Caching (--cache flag)
+- Preloads all cards from Magic, Pokemon, YuGiOh into RAM as Python dictionaries
+- Trades ~500MB memory for 5-10x faster scans on those games
+- Recommended for dedicated sorting sessions
+
+Adaptive Scanning
+- Starts with strict threshold (e.g., 5), progressively relaxes to 20
+- Stops when target number of matches found (e.g., 5)
+- Balances speed vs. thoroughness
+
+Multi-Game Filtering
+- Use --game multiple times: --game Magic --game Pokemon
+- Scanner only checks those games, ignoring other 315 tables
+- Dramatically speeds up scans when you know what you're sorting
+
+Set/Rarity/Foil Filtering
+- --set LEA --set LEB: only match cards from Limited Edition Alpha or Beta
+- --rarity M --rarity R: only mythics and rares
+- --foil-type Foil: only foil printings
+- Filters are applied at SQL query level for performance
+
+Database Auto-Download
+- If unified_card_database.db not found locally, scanner attempts download from:
+  - https://www.tcgtraders.app/download/unified_card_database.db (public server)
+- Enables zero-config setup on new machines
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6. PERFORMANCE CHARACTERISTICS
+═══════════════════════════════════════════════════════════════════════════════
+
+Typical scan times (on mid-range desktop, 8 threads):
+- Full 317-game scan: 1.5-3 seconds
+- Cached (Magic/Pokemon/YuGiOh): 0.3-0.6 seconds
+- Single game (Magic only): 0.2-0.4 seconds
+- With exact match early exit: 0.1-0.3 seconds
+
+Database size:
+- unified_card_database.db: ~365 MB 
+- Contains ~500,000+ unique cards across all games
+- Indexed for fast hash lookups (each query scans indexes, not full table)
+
+Camera requirements:
+- Minimum 720p (1280x720) recommended
+- Good lighting essential (LED ring light ideal)
+- Fixed focal distance (mount camera ~12-18 inches above card surface)
+- High contrast background (white or black playmat)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+7. ERROR HANDLING AND EDGE CASES
+═══════════════════════════════════════════════════════════════════════════════
+
+Unrecognized cards:
+- If top match has distance > 30 or confidence < 70%, treat as unknown
+- Send <RejectCard> to Arduino (routes to bin 33)
+- Log to status window with reason (Low confidence, No close match, etc.)
+
+Serial communication errors:
+- GUI displays "Serial error" message in status log
+- Arduino disconnects are detected via timeout (no "Arduino is ready" response)
+- User must click "Connect Arduino" to re-establish link
+
+Camera failures:
+- If cv2.VideoCapture(0) fails, GUI disables camera buttons and shows error
+- If camera disconnects during operation, _video_loop() stops and alerts user
+
+Database corruption:
+- Scanner validates database on startup (checks for required tables and columns)
+- If corruption detected, attempts to re-download from server
+- Critical error if both local and remote databases unavailable
+
+
+═══════════════════════════════════════════════════════════════════════════════
+8. FUTURE ENHANCEMENTS (not yet implemented)
+═══════════════════════════════════════════════════════════════════════════════
+
+- Real-time endstop checking during motion (firmware enhancement)
+- Automatic re-sort after bin overflow cleared (resume from last card)
+- Multi-camera support (process 2+ cards in parallel)
+- Cloud sync for collection tracking (upload Collection.txt to server)
+- Machine learning-based recognition (supplement pHash with CNN model)
+- Barcode/QR code scanning for sealed product sorting
+- Integration with TCGplayer API for live price updates
+- Web dashboard for monitoring sort jobs remotely
+- Automatic tray capacity estimation via weight sensors
