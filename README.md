@@ -34,14 +34,14 @@ The Moss Machine combines perceptual hash-based computer vision, multi-threaded 
   - **Adaptive threshold scanning** - progressive tightening from strict to relaxed thresholds
   - **Quick distance pre-filtering** - rejects bad matches early using single-channel checks
   - **Hamming distance** calculation for fast hash comparison
-  - Average scan time: ~2 seconds per card across 317 games
+  - **Average scan time** -: ~2 seconds per card across 317 games
 
 - **Advanced Image Processing**  
   - **OpenCV-based** card detection with contour finding and perspective correction
   - **Automatic card orientation** - handles cards at any angle with 4-point perspective transform
   - **Region-based hashing** - uses top-left 745x745px crop for consistent hash generation
   - **VL6180X ToF sensor integration** - hardware distance sensing for precise Z-axis control during pickup/release
-  - Real-time camera feed processing with automatic card detection
+  - **Real-time camera feed processing** with automatic card detection
 
 - **Flexible Sorting Modes**  
   - **Color sorting** - White, Blue, Black, Red, Green, Multicolor, Colorless, Land (Basic/Nonbasic)
@@ -110,7 +110,7 @@ The Moss Machine combines perceptual hash-based computer vision, multi-threaded 
 
 - **Technology Stack**  
   - **Python 3**: OpenCV (cv2), ImageHash, Pillow (PIL), PySerial, NumPy, SQLite3, Threading, Tkinter
-  - **Database**: Unified SQLite database with 317 game-specific card tables, games table, sets table
+  - **Database**: Unified SQLite database with 317 game-specific card tables, games table, sets table, and others (future development)
   - **Arduino**: C++ firmware for Mega 2560, Stepper motor control, I2C LCD, VL6180X ToF sensor (Adafruit library)
   - **Hardware**: RAMPS 1.4 board, A4988 stepper drivers, NEMA 17 motors, endstop switches, vacuum pumps, LED strips  
 
@@ -332,5 +332,4 @@ Please give credit to the original authors when creating derivatives.
 
 ---
 
-**Happy Sorting & Recognizing!**  
-*Build smarter, organize better, and enjoy your collection to the fullest!*
+**Happy Sorting!**  
