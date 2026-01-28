@@ -130,10 +130,9 @@ class ScannerGUI:
         self.auto_save_mode = tk.BooleanVar(value=True)  # Auto-save without prompts
         self.export_format = tk.StringVar(value="TCGTraders")  # TCGTraders or TCGPlayer
         
-        # Match backend settings (exactly 3 options)
+        # Match backend settings (pHash only)
         # - PHASH_RGB: per-channel RGB pHash matching
         # - PHASH_GRAY: grayscale pHash matching
-        # - RESNET50: ResNet50 embedding matching
         self.vector_backend = tk.StringVar(value="PHASH_RGB")
 
         # Matching strictness controls (adjustable via GUI)
@@ -324,7 +323,7 @@ class ScannerGUI:
                       variable=self.auto_save_mode, bg='#1a1a1a', fg='#fff',
                       selectcolor='#404040', font=('Arial', 8, 'bold')).pack(side=tk.LEFT, padx=5)
         
-        # Match Backend Selection
+        # Match Backend Selection (pHash only)
         self._section_label(frame, "MATCH BACKEND")
         backend_frame = tk.Frame(frame, bg='#1a1a1a', relief=tk.SUNKEN, bd=1)
         backend_frame.pack(fill=tk.X, padx=20, pady=3)
@@ -348,33 +347,6 @@ class ScannerGUI:
             text="pHash (Grayscale)",
             variable=self.vector_backend,
             value="PHASH_GRAY",
-            command=self.update_vector_backend,
-            bg='#1a1a1a',
-            fg='#fff',
-            selectcolor='#404040',
-            font=('Arial', 9),
-        ).pack(side=tk.LEFT, padx=8)
-        tk.Radiobutton(
-            backend_row,
-            text="ResNet50 (disabled)",
-            variable=self.vector_backend,
-            value="RESNET50",
-            command=self.update_vector_backend,
-            bg='#1a1a1a',
-            fg='#fff',
-            selectcolor='#404040',
-            font=('Arial', 9),
-            state=tk.DISABLED,
-        ).pack(side=tk.LEFT, padx=8)
-
-        # Place ORB option on its own row to avoid horizontal overflow
-        backend_row2 = tk.Frame(backend_frame, bg='#1a1a1a')
-        backend_row2.pack(fill=tk.X, pady=(2,6), padx=8)
-        tk.Radiobutton(
-            backend_row2,
-            text="ORB (Local Features, untested)",
-            variable=self.vector_backend,
-            value="ORB",
             command=self.update_vector_backend,
             bg='#1a1a1a',
             fg='#fff',
@@ -975,12 +947,6 @@ class ScannerGUI:
                     # phash
                     tk.Button(gf, text='pHash DB', bg='#2196F3', fg='white', width=10,
                               command=(lambda fn=f"phash_cards_{gid}.db": self._start_download(fn))).pack(side=tk.RIGHT, padx=6)
-                    # resnet50
-                    tk.Button(gf, text='ResNet50 DB', bg='#9C27B0', fg='white', width=12,
-                              command=(lambda fn=f"resnet50_cards_{gid}.db": self._start_download(fn))).pack(side=tk.RIGHT, padx=6)
-                    # orbs
-                    tk.Button(gf, text='ORB DB', bg='#607D8B', fg='white', width=10,
-                              command=(lambda fn=f"orbs_cards_{gid}.db": self._start_download(fn))).pack(side=tk.RIGHT, padx=6)
         except Exception:
             pass
 
@@ -1010,8 +976,8 @@ class ScannerGUI:
             return
         for path in glob.glob(os.path.join(base, '*')):
             name = os.path.basename(path)
-            # patterns: phash_cards_{id}.db, resnet50_cards_{id}.db, orbs_cards_{id}.db
-            for prefix in ('phash_cards_', 'resnet50_cards_', 'orbs_cards_'):
+            # patterns: phash_cards_{id}.db (pHash-only mode)
+            for prefix in ('phash_cards_',):
                 if name.startswith(prefix):
                     rest = name[len(prefix):]
                     gid = rest.split('.')[0]
@@ -1319,18 +1285,12 @@ class ScannerGUI:
         """Initialize scanner with collection settings"""
         try:
             backend = self.vector_backend.get()
-            use_resnet50 = backend == "RESNET50"
             use_grayscale_phash = backend == "PHASH_GRAY"
-            # Only allow vector search when using ResNet50 embeddings
-            use_vector = use_resnet50
-            auto_vector_when_unfiltered = use_resnet50
             self.scanner = OptimizedCardScanner(
                 max_workers=8, 
                 cache_enabled=True,
-                use_vector=use_vector,
-                use_resnet50=use_resnet50,
                 use_grayscale_phash=use_grayscale_phash,
-                auto_vector_when_unfiltered=auto_vector_when_unfiltered,
+                auto_vector_when_unfiltered=False,
                 enable_collection=self.collection_enabled,
                 default_condition=self.default_condition.get(),
                 default_language=self.default_language.get(),
@@ -1579,7 +1539,7 @@ class ScannerGUI:
             self.log_status(f"Inventory tracking {'ON' if enabled else 'OFF'}")
     
     def update_vector_backend(self):
-        """Update match backend (exactly 3 options)"""
+        """Update match backend (pHash only)"""
         backend = self.vector_backend.get()
 
         if backend == "PHASH_RGB":
@@ -1596,35 +1556,23 @@ class ScannerGUI:
             self.backend_status.config(text="✅ pHash (Grayscale)", fg='#00ff00')
             self.log_status("[Match] Using pHash (Grayscale)")
             if self.scanner:
-                self.scanner.use_resnet50 = False
                 self.scanner.use_grayscale_phash = True
                 self.scanner.use_vector = False
                 self.scanner.auto_vector_when_unfiltered = False
                 self.scanner.vector_searcher = None
-
-        elif backend == "RESNET50":
-            self.backend_status.config(text="✅ ResNet50 (Embeddings)", fg='#00ff00')
-            self.log_status("[Match] Using ResNet50 embeddings")
+        else:
+            # Fallback to RGB pHash if an unknown backend value is present
+            try:
+                self.vector_backend.set("PHASH_RGB")
+            except Exception:
+                pass
+            self.backend_status.config(text="✅ pHash (RGB channels)", fg='#00ff00')
             if self.scanner:
-                self.scanner.use_resnet50 = True
-                self.scanner.use_grayscale_phash = False
-                self.scanner.use_vector = True
-                self.scanner.auto_vector_when_unfiltered = True
-                self.scanner.vector_searcher = None
-                self.log_status("[Match] Tip: build resnet50_index.bin if missing")
-        elif backend == "ORB":
-            self.backend_status.config(text="✅ ORB (Local features)", fg='#00ff00')
-            self.log_status("[Match] Using ORB local-feature matching (brute-force)")
-            if self.scanner:
-                # disable vector-based search options
                 self.scanner.use_resnet50 = False
                 self.scanner.use_grayscale_phash = False
                 self.scanner.use_vector = False
-                # enable ORB
-                try:
-                    self.scanner.enable_orb(True)
-                except Exception:
-                    pass
+                self.scanner.auto_vector_when_unfiltered = False
+                self.scanner.vector_searcher = None
     
     def connect_arduino(self):
         """Connect to Arduino"""
@@ -2457,8 +2405,6 @@ class ScannerGUI:
                         card_info['scan_backend'] = 'pHash (RGB)'
                     elif backend == 'PHASH_GRAY':
                         card_info['scan_backend'] = 'pHash (Grayscale)'
-                    elif backend == 'RESNET50':
-                        card_info['scan_backend'] = 'ResNet50'
             except Exception:
                 pass
             
@@ -2520,6 +2466,18 @@ class ScannerGUI:
             except Exception:
                 conf = 0.0
             cv2.putText(frame, f"Confidence: {conf:.1f}%", (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            y += 30
+            try:
+                phash_conf = float(card.get('phash_confidence', 0))
+            except Exception:
+                phash_conf = 0.0
+            cv2.putText(frame, f"pHash: {phash_conf:.1f}%", (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+            y += 30
+            try:
+                mser_score = float(card.get('mser_score', 0)) * 100.0
+            except Exception:
+                mser_score = 0.0
+            cv2.putText(frame, f"MSER: {mser_score:.1f}%", (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
             y += 30
             if card.get('market_price') is not None:
                 try:

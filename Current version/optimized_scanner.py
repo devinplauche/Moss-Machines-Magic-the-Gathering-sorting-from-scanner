@@ -22,740 +22,15 @@ import imagehash
 from PIL import Image
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from queue import PriorityQueue
 import time
 try:
     import serial
 except Exception:
     serial = None
 import os
-import numpy as np
-try:
-    import hnswlib
-except Exception:
-    hnswlib = None
 
 # Import collection manager
 from card_collection_manager import CardCollectionManager
-
-# Vector searcher: loads phash-derived embeddings (192 bits) or ResNet50 embeddings (2048-dim) into memory and searches
-class VectorSearcher:
-    def __init__(self, db_path, use_hnsw=True, use_resnet50=False):
-        self.db_path = db_path
-        self.use_hnsw = use_hnsw and hnswlib is not None
-        self.use_resnet50 = use_resnet50
-        self.vectors = None  # shape (N, 192) or (N, 2048) as float32 (only for brute force)
-        self.product_ids = None
-        self.games = None
-        self.loaded = False
-        self.hnsw_index = None
-
-        # Cache for resolving game/table hints to table names
-        self._game_key_to_table: dict[str, str] | None = None
-        self._card_tables: list[str] | None = None
-        self._db_dir = Path(db_path).parent
-        
-        # Choose index files based on embedding type
-        if use_resnet50:
-            self.index_path = Path(db_path).parent / 'resnet50_index.bin'
-            self.mapping_path = Path(db_path).parent / 'resnet50_index_mapping.npy'
-            self.games_path = Path(db_path).parent / 'resnet50_index_games.npy'
-            self.embedding_dim = 2048
-            self.embedding_column = 'resnet50_embedding'
-            self.embedding_size = 8192  # bytes
-        else:
-            self.index_path = Path(db_path).parent / 'vector_index.bin'
-            self.mapping_path = Path(db_path).parent / 'vector_index_mapping.npy'
-            self.games_path = Path(db_path).parent / 'vector_index_games.npy'
-            self.embedding_dim = 192
-            self.embedding_column = 'embedding'
-            self.embedding_size = 192  # bytes
-
-    @staticmethod
-    def phash_to_bits(phash_str):
-        if not phash_str:
-            return np.zeros(0, dtype=np.uint8)
-        try:
-            s = str(phash_str).strip()
-            if s.startswith('0x'):
-                s = s[2:]
-            # number of bits = hex chars * 4
-            nbits = len(s) * 4
-            phash_int = int(s, 16)
-            bits = [(phash_int >> i) & 1 for i in range(nbits)]
-            return np.array(bits, dtype=np.uint8)
-        except Exception:
-            return np.zeros(0, dtype=np.uint8)
-
-    @staticmethod
-    def create_embedding_from_phashes(r_phash, g_phash, b_phash):
-        r_bits = VectorSearcher.phash_to_bits(r_phash)
-        g_bits = VectorSearcher.phash_to_bits(g_phash)
-        b_bits = VectorSearcher.phash_to_bits(b_phash)
-        if r_bits.size == 0 or g_bits.size == 0 or b_bits.size == 0:
-            return np.array([], dtype=np.float32)
-        emb = np.concatenate([r_bits, g_bits, b_bits]).astype(np.float32)
-        return emb
-    
-    def create_resnet50_embedding(self, image):
-        """Generate ResNet50 embedding from PIL image or numpy array"""
-        try:
-            import torch
-            import torchvision.transforms as transforms
-            import torchvision.models as models
-            import os
-            from pathlib import Path
-            
-            # Set torch hub/cache to workspace directory to avoid permission issues
-            cache_dir = Path(self._db_dir) / '.torch_cache'
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            torch.hub.set_dir(str(cache_dir))
-            os.environ['TORCH_HOME'] = str(cache_dir)
-            
-            # Lazy load ResNet50 model (cached in class attribute)
-            if not hasattr(VectorSearcher, '_resnet50_model'):
-                VectorSearcher._resnet50_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-                VectorSearcher._resnet50_model.fc = torch.nn.Identity()
-                VectorSearcher._resnet50_model.eval()
-                if torch.cuda.is_available():
-                    VectorSearcher._resnet50_model = VectorSearcher._resnet50_model.cuda()
-            
-            # Convert to PIL if needed
-            if isinstance(image, np.ndarray):
-                from PIL import Image
-                if image.shape[2] == 4:  # RGBA
-                    image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
-                elif len(image.shape) == 2:  # Grayscale
-                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-                image = Image.fromarray(image)
-            
-            # Preprocessing
-            preprocess = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-            
-            img_tensor = preprocess(image).unsqueeze(0)
-            if torch.cuda.is_available():
-                img_tensor = img_tensor.cuda()
-            
-            with torch.inference_mode():
-                embedding = VectorSearcher._resnet50_model(img_tensor).cpu().numpy()[0]
-
-            embedding = embedding.astype(np.float32)
-            # Normalize for cosine distance
-            n = float(np.linalg.norm(embedding))
-            if n > 0:
-                embedding = embedding / n
-            return embedding
-        except Exception as e:
-            print(f"[!] Failed to generate ResNet50 embedding: {e}")
-            return None
-
-    def _ensure_lookup_caches(self):
-        if self._card_tables is not None and self._game_key_to_table is not None:
-            return
-
-        conn = sqlite3.connect(self.db_path)
-        cur = conn.cursor()
-        try:
-            self._card_tables = [r[0] for r in cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'cards_%'"
-            ).fetchall()]
-
-            # Build mapping from game name/display_name to table name
-            game_key_to_id: dict[str, int] = {}
-            try:
-                rows = cur.execute("SELECT id, name, display_name FROM games").fetchall()
-                for gid, name, display_name in rows:
-                    if name is not None:
-                        game_key_to_id[str(name)] = int(gid)
-                    if display_name is not None:
-                        game_key_to_id[str(display_name)] = int(gid)
-            except Exception:
-                rows = cur.execute("SELECT id, name FROM games").fetchall()
-                for gid, name in rows:
-                    if name is not None:
-                        game_key_to_id[str(name)] = int(gid)
-
-            # Prefer explicit mapping table if present
-            mapping = {}
-            try:
-                mapping_exists = cur.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='game_table_mapping'"
-                ).fetchone()
-                if mapping_exists:
-                    for game_name, table_name in cur.execute(
-                        "SELECT game_name, table_name FROM game_table_mapping"
-                    ).fetchall():
-                        mapping[str(game_name)] = str(table_name)
-            except Exception:
-                mapping = {}
-
-            self._game_key_to_table = {}
-
-            # direct mapping entries
-            for k, v in mapping.items():
-                self._game_key_to_table[str(k)] = str(v)
-
-            # derive cards_<id>
-            for game_key, gid in game_key_to_id.items():
-                table = f"cards_{gid}"
-                self._game_key_to_table[str(game_key)] = table
-        finally:
-            conn.close()
-
-    def _resolve_table_hint(self, hint) -> str | None:
-        """Resolve a hint from index mapping to an actual cards_* table name."""
-        self._ensure_lookup_caches()
-
-        if hint is None:
-            return None
-
-        # Already a table name
-        s = str(hint)
-        if s.startswith("cards_"):
-            return s
-
-        # Numeric game id
-        try:
-            gid = int(s)
-            return f"cards_{gid}"
-        except Exception:
-            pass
-
-        # Game name/display name
-        assert self._game_key_to_table is not None
-        return self._game_key_to_table.get(s)
-
-    def _lookup_card_row(self, cur, product_id, table_hint) -> tuple | None:
-        """Fetch card metadata row by product_id using a best-effort table hint."""
-        table = self._resolve_table_hint(table_hint)
-        if table:
-            try:
-                return cur.execute(
-                    f"SELECT name, number, set_code, rarity, subTypeName, market_price, game FROM {table} WHERE product_id = ? AND COALESCE(sealed, 0) = 0 LIMIT 1",
-                    (product_id,),
-                ).fetchone()
-            except Exception:
-                pass
-
-        # Fallback: scan all cards_* tables (slow, but only used if mapping is stale)
-        assert self._card_tables is not None
-        for t in self._card_tables:
-            try:
-                row = cur.execute(
-                    f"SELECT name, number, set_code, rarity, subTypeName, market_price, game FROM {t} WHERE product_id = ? AND COALESCE(sealed, 0) = 0 LIMIT 1",
-                    (product_id,),
-                ).fetchone()
-                if row:
-                    return row
-            except Exception:
-                continue
-
-        return None
-
-    def load_vectors(self, game_filter=None):
-        # Try to load HNSW index first (much faster)
-        if self.use_hnsw and self.index_path.exists() and self.mapping_path.exists() and self.games_path.exists():
-            try:
-                import time
-                start = time.time()
-                
-                # Load product_id mapping
-                self.product_ids = list(np.load(str(self.mapping_path)))
-                
-                # Load games mapping (precomputed)
-                self.games = list(np.load(str(self.games_path)))
-                
-                # Load HNSW index
-                dim = self.embedding_dim
-                space = 'cosine' if self.use_resnet50 else 'l2'
-                self.hnsw_index = hnswlib.Index(space=space, dim=dim)
-                self.hnsw_index.load_index(str(self.index_path))
-                self.hnsw_index.set_ef(200)  # Search quality parameter (increased for better accuracy)
-                
-                elapsed = time.time() - start
-                print(f"[+] Loaded HNSW index: {len(self.product_ids):,} vectors in {elapsed:.2f}s")
-                self.loaded = True
-                return
-            except Exception as e:
-                print(f"[!] Failed to load HNSW index: {e}")
-                print(f"[*] Falling back to brute-force search...")
-                self.hnsw_index = None
-        
-        # Fallback: load vectors for brute-force search from split tables
-        conn = sqlite3.connect(self.db_path)
-        cur = conn.cursor()
-        
-        # Get all game tables (cards_1, cards_2, etc.)
-        try:
-            tables = cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'cards_%'").fetchall()
-            table_names = [t[0] for t in tables]
-        except Exception:
-            table_names = []
-        
-        all_rows = []
-        for table in table_names:
-            try:
-                # Include all entries from game 81 regardless of product_type_name.
-                # For all other games, restrict to card-like items.
-                try:
-                    table_game_id = int(str(table).split("_", 1)[1])
-                except Exception:
-                    table_game_id = None
-
-                type_clause = "AND (product_type_name = 'Cards' OR product_type_name LIKE '%Singles%')"
-                if table_game_id == 81:
-                    type_clause = ""
-
-                if game_filter:
-                    query = f"""SELECT product_id, game, {self.embedding_column} FROM {table} 
-                                WHERE {self.embedding_column} IS NOT NULL 
-                                AND LENGTH({self.embedding_column}) = {self.embedding_size}
-                                {type_clause}
-                                AND COALESCE(sealed, 0) = 0
-                                AND game = ?"""
-                    rows = cur.execute(query, (game_filter,)).fetchall()
-                else:
-                    query = f"""SELECT product_id, game, {self.embedding_column} FROM {table} 
-                                WHERE {self.embedding_column} IS NOT NULL 
-                                AND LENGTH({self.embedding_column}) = {self.embedding_size}
-                                {type_clause}"""
-                    query = query.rstrip() + "\n                                AND COALESCE(sealed, 0) = 0"
-                    rows = cur.execute(query).fetchall()
-                all_rows.extend(rows)
-            except Exception:
-                continue  # Skip tables that don't have embedding column
-        
-        conn.close()
-
-        self.product_ids = [row[0] for row in all_rows]
-        self.games = [row[1] for row in all_rows]
-
-        if self.use_resnet50:
-            # ResNet50 embeddings are stored as float32
-            vecs = [np.frombuffer(row[2], dtype=np.float32) for row in all_rows]
-        else:
-            # Phash embeddings are stored as uint8
-            vecs = [np.frombuffer(row[2], dtype=np.uint8).astype(np.float32) for row in all_rows]
-        
-        if vecs:
-            self.vectors = np.vstack(vecs)
-        else:
-            self.vectors = np.zeros((0, self.embedding_dim), dtype=np.float32)
-
-        # Pre-normalize ResNet50 vectors for brute-force cosine
-        if self.use_resnet50 and self.vectors.size:
-            norms = np.linalg.norm(self.vectors, axis=1, keepdims=True)
-            self.vectors = self.vectors / (norms + 1e-8)
-
-        self.loaded = True
-        print(f"[+] Loaded {len(self.product_ids):,} vectors from {len(table_names)} tables")
-
-    def search_by_phashes(self, r_hash, g_hash, b_hash, limit=10, game_filter=None):
-        if not self.loaded:
-            self.load_vectors(game_filter)
-
-        query = VectorSearcher.create_embedding_from_phashes(r_hash, g_hash, b_hash)
-
-        # Use HNSW index if available (much faster)
-        if self.hnsw_index is not None:
-            # Fetch more results for better accuracy (re-ranking will filter)
-            # Increased from 10x to 20x for game filtering to ensure enough matches
-            fetch_k = limit * 20 if game_filter else limit * 3
-            labels, distances = self.hnsw_index.knn_query(query.reshape(1, -1), k=min(fetch_k, len(self.product_ids)))
-            idxs = labels[0]
-            dists_squared = distances[0]
-            avg_distance = dists_squared / 3.0
-        else:
-            # Fallback: brute-force L2 distance
-            dists = np.linalg.norm(self.vectors - query, axis=1)
-            total_hamming = dists ** 2
-            avg_distance = total_hamming / 3.0
-            idxs = np.argsort(avg_distance)[:limit * 10 if game_filter else limit]
-
-        results = []
-        
-        # When using HNSW index, use its hint to find the row quickly.
-        if self.hnsw_index is not None and self.games is not None:
-            conn = sqlite3.connect(self.db_path)
-            cur = conn.cursor()
-
-            for idx, i in enumerate(idxs):
-                pid = self.product_ids[i]
-                hint = self.games[i]
-
-                if len(results) >= limit:
-                    break
-
-                row = self._lookup_card_row(cur, pid, hint)
-                if row:
-                    name, number, set_code, rarity, subTypeName, market_price, game_name = row
-                else:
-                    name = number = set_code = rarity = subTypeName = market_price = game_name = None
-
-                # Apply game filter after resolving metadata
-                if game_filter and game_name is not None:
-                    if isinstance(game_filter, int):
-                        # game filter as numeric id: compare to resolved table
-                        if self._resolve_table_hint(hint) != f"cards_{int(game_filter)}":
-                            continue
-                    else:
-                        if str(game_name) != str(game_filter):
-                            continue
-
-                confidence = max(0.0, 100.0 - (avg_distance[idx] / 256.0 * 100.0))
-
-                results.append({
-                    'product_id': pid,
-                    'name': name,
-                    'number': number,
-                    'set': set_code,
-                    'rarity': rarity,
-                    'foil_type': subTypeName,
-                    'market_price': market_price,
-                    'game': game_name,
-                    'distance': float(avg_distance[idx]),
-                    'confidence': float(confidence)
-                })
-            conn.close()
-        else:
-            # Slow path: search all tables (for brute-force fallback)
-            conn = sqlite3.connect(self.db_path)
-            cur = conn.cursor()
-            
-            # Get table list once
-            tables = cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'cards_%'").fetchall()
-            table_names = [t[0] for t in tables]
-            
-            for idx, i in enumerate(idxs):
-                pid = self.product_ids[i]
-                
-                # Try to find card in any of the split tables
-                found = False
-                for table in table_names:
-                    try:
-                        query = f'SELECT name, number, set_code, rarity, subTypeName, market_price, game FROM {table} WHERE product_id = ? LIMIT 1'
-                        row = cur.execute(query, (pid,)).fetchone()
-                        if row:
-                            name, number, set_code, rarity, subTypeName, market_price, game = row
-                            found = True
-                            break
-                    except Exception:
-                        continue
-                
-                if not found:
-                    # Fallback to defaults if not found
-                    name = number = set_code = rarity = subTypeName = market_price = game = None
-
-                confidence = max(0.0, 100.0 - (avg_distance[idx] / 256.0 * 100.0))
-
-                results.append({
-                    'product_id': pid,
-                    'name': name,
-                    'number': number,
-                    'set': set_code,
-                    'rarity': rarity,
-                    'foil_type': subTypeName,
-                    'market_price': market_price,
-                    'game': game,
-                    'distance': float(avg_distance[idx]),
-                    'confidence': float(confidence)
-                })
-            conn.close()
-        return results
-
-    def search_by_orb(self, image, limit=10, game_filter=None, max_rows=None):
-        """Search DB using ORB descriptor matching.
-
-        This is a brute-force fallback that loads stored descriptors from the DB
-        and matches them against descriptors extracted from `image`.
-        """
-        if not cv2:
-            raise RuntimeError("OpenCV not available for ORB matching")
-
-        if self._orb is None:
-            try:
-                self._orb = cv2.ORB_create()
-            except Exception as e:
-                raise RuntimeError(f"Failed to create ORB detector: {e}")
-
-        # Prepare query descriptors
-        if isinstance(image, np.ndarray):
-            img = image
-        else:
-            # assume PIL image
-            try:
-                img = np.array(image.convert('L'))
-            except Exception:
-                img = None
-
-        if img is None:
-            return []
-
-        if img.ndim == 3:
-            img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        else:
-            img_gray = img
-
-        kp, qdes = self._orb.detectAndCompute(img_gray, None)
-        if qdes is None or len(qdes) == 0:
-            return []
-
-        # Prepare both uint8 and float32 query descriptors for dtype-aware matching
-        qdes_u8 = qdes.astype('uint8') if qdes.dtype != np.uint8 else qdes
-        try:
-            qdes_f32 = qdes.astype('float32') if qdes.dtype != np.float32 else qdes
-        except Exception:
-            qdes_f32 = qdes.astype('float32')
-
-        bf_hamming = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-        bf_l2 = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-
-        conn = sqlite3.connect(self.db_path)
-        cur = conn.cursor()
-
-        # Determine which tables to scan. If a game_filter is provided, restrict to that game's table.
-        tables = []
-        if game_filter:
-            # Try resolving via internal mapping or hint
-            try:
-                # If numeric id provided
-                if isinstance(game_filter, int) or (isinstance(game_filter, str) and game_filter.isdigit()):
-                    tname = f"cards_{int(game_filter)}"
-                    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (tname,))
-                    if cur.fetchone():
-                        tables = [tname]
-                else:
-                    # Try games mapping
-                    if hasattr(self, 'games') and self.games:
-                        # game_filter might be display name or internal name
-                        if game_filter in self.games:
-                            tables = [self.games[game_filter]['table']]
-                        else:
-                            # try to resolve via helper
-                            resolved = self._resolve_table_hint(game_filter)
-                            if resolved:
-                                tables = [resolved]
-                    else:
-                        resolved = self._resolve_table_hint(game_filter)
-                        if resolved:
-                            tables = [resolved]
-            except Exception:
-                tables = []
-
-        if not tables:
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'cards_%'")
-            tables = [r[0] for r in cur.fetchall()]
-
-        results = []
-
-        total_scanned = 0
-        for table in tables:
-            try:
-                cur.execute(f"PRAGMA table_info('{table}')")
-                cols = [r[1] for r in cur.fetchall()]
-                if 'orb_descriptor' not in cols:
-                    continue
-
-                cur.execute(f"SELECT product_id, orb_descriptor FROM {table} WHERE orb_descriptor IS NOT NULL")
-                while True:
-                    rows = cur.fetchmany(256)
-                    if not rows:
-                        break
-                    for pid, blob in rows:
-                        if blob is None:
-                            continue
-                        try:
-                            d = pickle.loads(blob)
-                        except Exception:
-                            continue
-                        darr = np.array(d)
-                        # choose matcher based on stored dtype
-                        try:
-                            if darr.dtype == np.float32:
-                                # use L2 on float32 descriptors
-                                matches = bf_l2.match(qdes_f32, darr)
-                            else:
-                                # ensure uint8 for Hamming
-                                if darr.dtype != np.uint8:
-                                    try:
-                                        darr_u8 = darr.astype(np.uint8)
-                                    except Exception:
-                                        darr_u8 = (darr % 256).astype(np.uint8)
-                                else:
-                                    darr_u8 = darr
-                                matches = bf_hamming.match(qdes_u8, darr_u8)
-
-                            if matches:
-                                match_count = len(matches)
-                                avg_dist = sum(m.distance for m in matches) / match_count
-                                # composite score: prefer more matches and lower average distance
-                                comp_score = match_count / (1.0 + float(avg_dist))
-                            else:
-                                match_count = 0
-                                avg_dist = None
-                                comp_score = 0.0
-                        except Exception:
-                            match_count = 0
-                            avg_dist = None
-                            comp_score = 0.0
-
-                        if match_count > 0:
-                            results.append({'product_id': str(pid), 'matches': int(match_count), 'avg_distance': float(avg_dist) if avg_dist is not None else None, 'score': float(comp_score), 'table': table})
-
-                        total_scanned += 1
-                        if max_rows and total_scanned >= max_rows:
-                            break
-                    if max_rows and total_scanned >= max_rows:
-                        break
-            except Exception:
-                continue
-            if max_rows and total_scanned >= max_rows:
-                break
-
-        conn.close()
-
-        # sort by matches desc
-        results.sort(key=lambda x: x['matches'], reverse=True)
-        # collapse by product_id keeping best
-        seen = {}
-        filtered = []
-        for r in results:
-            if r['product_id'] in seen:
-                continue
-            seen[r['product_id']] = True
-            filtered.append(r)
-            if len(filtered) >= limit:
-                break
-
-        return filtered
-    
-    def search_by_image(self, image, limit=10, game_filter=None):
-        """Search using ResNet50 embeddings generated from image
-        
-        Args:
-            image: PIL Image or numpy array
-            limit: Number of results to return
-            game_filter: Optional game name filter
-        
-        Returns:
-            List of match dictionaries with product_id, name, distance, etc.
-        """
-        if not self.use_resnet50:
-            raise ValueError("search_by_image requires use_resnet50=True")
-        
-        if not self.loaded:
-            self.load_vectors(game_filter)
-        
-        # Generate ResNet50 embedding
-        query = self.create_resnet50_embedding(image)
-        if query is None:
-            return []
-        
-        # Use HNSW index if available (much faster)
-        if self.hnsw_index is not None:
-            # Fetch more results for better accuracy (re-ranking will filter)
-            fetch_k = limit * 20 if game_filter else limit * 3
-            labels, distances = self.hnsw_index.knn_query(query.reshape(1, -1), k=min(fetch_k, len(self.product_ids)))
-            idxs = labels[0]
-            distances_arr = distances[0]
-        else:
-            # Fallback: brute-force cosine distance
-            # vectors are pre-normalized in load_vectors
-            query_norm = query / (np.linalg.norm(query) + 1e-8)
-            cosine_sim = np.dot(self.vectors, query_norm)
-            distances_arr = 1.0 - cosine_sim  # Convert similarity to distance
-            idxs = np.argsort(distances_arr)[:limit * 10 if game_filter else limit]
-        
-        results = []
-        
-        if self.hnsw_index is not None and self.games is not None:
-            conn = sqlite3.connect(self.db_path)
-            cur = conn.cursor()
-
-            for idx, i in enumerate(idxs):
-                pid = self.product_ids[i]
-                hint = self.games[i]
-
-                if len(results) >= limit:
-                    break
-
-                row = self._lookup_card_row(cur, pid, hint)
-                if row:
-                    name, number, set_code, rarity, subTypeName, market_price, game_name = row
-                else:
-                    name = number = set_code = rarity = subTypeName = market_price = game_name = None
-
-                if game_filter and game_name is not None:
-                    if isinstance(game_filter, int):
-                        if self._resolve_table_hint(hint) != f"cards_{int(game_filter)}":
-                            continue
-                    else:
-                        if str(game_name) != str(game_filter):
-                            continue
-
-                confidence = max(0.0, 100.0 * (1.0 - float(distances_arr[idx]) / 2.0))
-
-                results.append({
-                    'product_id': pid,
-                    'name': name,
-                    'number': number,
-                    'set': set_code,
-                    'rarity': rarity,
-                    'foil_type': subTypeName,
-                    'market_price': market_price,
-                    'game': game_name,
-                    'distance': float(distances_arr[idx]),
-                    'confidence': float(confidence)
-                })
-            conn.close()
-        else:
-            # Slow path: search all tables (for brute-force fallback)
-            conn = sqlite3.connect(self.db_path)
-            cur = conn.cursor()
-            
-            tables = cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'cards_%'").fetchall()
-            table_names = [t[0] for t in tables]
-            
-            for idx, i in enumerate(idxs):
-                pid = self.product_ids[i]
-                
-                # Try to find card in any of the split tables
-                found = False
-                for table in table_names:
-                    try:
-                        query_sql = f'SELECT name, number, set_code, rarity, subTypeName, market_price, game FROM {table} WHERE product_id = ? LIMIT 1'
-                        row = cur.execute(query_sql, (pid,)).fetchone()
-                        if row:
-                            name, number, set_code, rarity, subTypeName, market_price, game = row
-                            found = True
-                            break
-                    except Exception:
-                        continue
-                
-                if not found:
-                    name = number = set_code = rarity = subTypeName = market_price = game = None
-
-                confidence = max(0.0, 100.0 * (1.0 - distances_arr[idx] / 2.0))
-
-                results.append({
-                    'product_id': pid,
-                    'name': name,
-                    'number': number,
-                    'set': set_code,
-                    'rarity': rarity,
-                    'foil_type': subTypeName,
-                    'market_price': market_price,
-                    'game': game,
-                    'distance': float(distances_arr[idx]),
-                    'confidence': float(confidence)
-                })
-            conn.close()
-        return results
 
 def download_database(db_path="unified_card_database.db"):
     """Download database from server if it doesn't exist locally.
@@ -810,15 +85,14 @@ def download_database(db_path="unified_card_database.db"):
 
 class OptimizedCardScanner:
     def __init__(self, db_path="unified_card_database.db", max_workers=8, cache_enabled=True, 
-                 serial_port=None, baud_rate=9600, use_vector=False, use_resnet50=False, use_grayscale_phash=False,
+                 serial_port=None, baud_rate=9600, use_grayscale_phash=False,
                  auto_vector_when_unfiltered=True, enable_collection=True,
                  default_condition='Near Mint', default_language='EN', default_foil=False,
-                 prompt_for_details=True):
+                 prompt_for_details=True,
+                 enable_mser_scoring=True, mser_weight=0.15):
         """Initialize optimized scanner
         
         Args:
-            use_vector: Enable vector search (fast approximate nearest neighbor)
-            use_resnet50: Use ResNet50 embeddings (2048-dim) instead of phash embeddings (192-dim)
             default_condition: Default condition for saved cards (Near Mint, Lightly Played, etc.)
             default_language: Default language code (EN, JP, FR, etc.)
             default_foil: Default foil status (True/False)
@@ -911,6 +185,7 @@ class OptimizedCardScanner:
         
         # Default: scan all games
         self.active_games = list(self.games.keys())
+
         
         # Serial communication for Arduino
         self.serial_port = serial_port
@@ -934,153 +209,18 @@ class OptimizedCardScanner:
             'cards_checked': 0,
             'cache_hits': 0
         }
-        # Vector search support (lazy load)
-        self.use_vector = use_vector
-        self.use_resnet50 = use_resnet50
-        # ORB descriptor based matching
+        # Matching backend (pHash only; vector/ORB disabled)
+        self.use_vector = False
+        self.use_resnet50 = False
         self.use_orb = False
         self._orb = None
         self.use_grayscale_phash = use_grayscale_phash
-        self.auto_vector_when_unfiltered = auto_vector_when_unfiltered
+        self.auto_vector_when_unfiltered = False
         self.vector_searcher = None
-        
-        # Vector searcher will be enabled explicitly via `enable_vector_search`
-        self.vector_searcher = None
+        # MSER-based quality scoring (input-only signal, blended into confidence)
+        self.enable_mser_scoring = enable_mser_scoring
+        self.mser_weight = float(mser_weight)
 
-    def enable_orb(self, enabled=True):
-        """Enable or disable ORB-based matching."""
-        self.use_orb = bool(enabled)
-        if self.use_orb and self._orb is None:
-            try:
-                self._orb = cv2.ORB_create()
-            except Exception:
-                self._orb = None
-
-    def enable_vector_search(self, game_name, use_resnet50=False):
-        """Enable vector search for a specific game.
-
-        Tries to use per-game recognition DBs under `recognition_data/`:
-          - phash: recognition_data/phash_cards_<game_id>.db
-          - resnet50: recognition_data/resnet50_cards_<game_id>.db
-
-        If the per-game DB does not exist, attempts to download it from
-        the configured servers. Falls back to using the unified DB with
-        a game filter if download isn't available.
-        """
-        from pathlib import Path
-
-        if game_name not in self.games:
-            raise ValueError(f"Unknown game: {game_name}")
-
-        game_id = int(self.games[game_name]['id'])
-        base = Path(__file__).resolve().parent
-        recog_dir = base / 'recognition_data'
-
-        # Choose filename
-        if use_resnet50:
-            fname = f"resnet50_cards_{game_id}.db"
-        else:
-            fname = f"phash_cards_{game_id}.db"
-
-        candidate = recog_dir / fname
-
-        # Ensure recognition_data dir exists
-        try:
-            recog_dir.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-
-        # Download if missing
-        if not candidate.exists():
-            print(f"[!] Recognition DB not found: {candidate}")
-            print("[*] Attempting to download per-game recognition DB...")
-            # download_database accepts a path and will save with that name
-            if not download_database(str(candidate)):
-                print("[!] Could not download per-game DB; falling back to unified DB filtered load")
-                try:
-                    self.vector_searcher = VectorSearcher(self.db_path, use_resnet50=use_resnet50)
-                    self.vector_searcher.load_vectors(game_filter=game_name)
-                    self.use_vector = True
-                    self.use_resnet50 = use_resnet50
-                    print('[+] Vector search enabled (unified DB, filtered by game)')
-                    return True
-                except Exception as e:
-                    print(f"[!] Failed to enable vector search (unified DB fallback): {e}")
-                    return False
-
-        # Use the per-game DB
-        try:
-            self.vector_searcher = VectorSearcher(str(candidate), use_resnet50=use_resnet50)
-            self.vector_searcher.load_vectors()
-            self.use_vector = True
-            self.use_resnet50 = use_resnet50
-            print(f"[+] Vector search enabled using {candidate}")
-            return True
-        except Exception as e:
-            print(f"[!] Failed to load vector searcher from {candidate}: {e}")
-            # Try unified DB fallback
-            try:
-                self.vector_searcher = VectorSearcher(self.db_path, use_resnet50=use_resnet50)
-                self.vector_searcher.load_vectors(game_filter=game_name)
-                self.use_vector = True
-                self.use_resnet50 = use_resnet50
-                print('[+] Vector search enabled (unified DB, filtered by game)')
-                return True
-            except Exception as e2:
-                print(f"[!] Unified DB fallback also failed: {e2}")
-                return False
-
-    def get_orb_descriptor_by_product_id(self, product_id, table_hint=None):
-        """Return the stored ORB descriptor numpy array for a given product_id, or None."""
-        conn = sqlite3.connect(self.db_path)
-        cur = conn.cursor()
-        # If table_hint given, try that first
-        tables = []
-        if table_hint:
-            t = self._resolve_table_hint(table_hint)
-            if t:
-                tables.append(t)
-        # fallback: all cards_* tables
-        if not tables:
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'cards_%'")
-            tables = [r[0] for r in cur.fetchall()]
-
-        for table in tables:
-            try:
-                cur.execute(f"PRAGMA table_info('{table}')")
-                cols = [r[1] for r in cur.fetchall()]
-                if 'orb_descriptor' not in cols:
-                    continue
-                cur.execute(f"SELECT orb_descriptor FROM {table} WHERE product_id = ? LIMIT 1", (product_id,))
-                row = cur.fetchone()
-                if row and row[0] is not None:
-                    arr = pickle.loads(row[0])
-                    conn.close()
-                    return np.array(arr)
-            except Exception:
-                continue
-        conn.close()
-        return None
-
-    def search_by_orb(self, image, limit=10, game_filter=None, max_rows=None):
-        """Delegate ORB search to a VectorSearcher helper to scan DB tables.
-
-        This creates a temporary `VectorSearcher` instance which contains the
-        ORB-based search implementation (and lookup helpers). We pass through
-        our ORB detector if available to avoid reinitializing it.
-        """
-        try:
-            vs = VectorSearcher(self.db_path, use_hnsw=False, use_resnet50=False)
-        except Exception:
-            # fallback: implement minimal scanning here
-            raise RuntimeError('Failed to create helper VectorSearcher for ORB search')
-
-        # reuse ORB detector if present
-        if self._orb is not None:
-            vs._orb = self._orb
-
-        return vs.search_by_orb(image, limit=limit, game_filter=game_filter, max_rows=max_rows)
-    
     def get_connection(self):
         """Get thread-local database connection"""
         if not hasattr(self.local, 'conn'):
@@ -1562,7 +702,67 @@ class OptimizedCardScanner:
             return None, None, None
 
         return r_h, g_h, b_h
-    
+
+    def _compute_mser_score(self, image):
+        """Compute a lightweight MSER quality score for the input image (0..1)."""
+        if not self.enable_mser_scoring or cv2 is None:
+            return None
+
+        try:
+            if isinstance(image, Image.Image):
+                img = np.array(image)
+                if img.ndim == 3:
+                    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                else:
+                    gray = img
+            elif isinstance(image, np.ndarray):
+                if image.ndim == 3:
+                    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                else:
+                    gray = image
+            else:
+                return None
+
+            h, w = gray.shape[:2]
+            if h < 50 or w < 50:
+                return None
+
+            mser = cv2.MSER_create()
+            regions, _ = mser.detectRegions(gray)
+            if not regions:
+                return 0.0
+
+            img_area = float(h * w)
+            # Estimate region area mass
+            area_sum = 0.0
+            for p in regions:
+                if p is None or len(p) < 5:
+                    continue
+                try:
+                    area_sum += float(cv2.contourArea(p.reshape(-1, 1, 2)))
+                except Exception:
+                    continue
+
+            region_count = len(regions)
+            area_ratio = area_sum / img_area if img_area > 0 else 0.0
+
+            # Normalize metrics into 0..1 range (tuned for card-sized crops)
+            def _norm(val, vmin, vmax):
+                if vmax <= vmin:
+                    return 0.0
+                return max(0.0, min(1.0, (val - vmin) / (vmax - vmin)))
+
+            # Typical MSER counts on card crops are in the hundreds
+            count_score = _norm(region_count, 120, 1200)
+            # Area mass ratio for text/edges tends to be small but non-zero
+            area_score = _norm(area_ratio, 0.008, 0.18)
+
+            score = 0.7 * count_score + 0.3 * area_score
+            return max(0.0, min(1.0, score))
+
+        except Exception:
+            return None
+
     def hamming_distance(self, hash1, hash2):
         """Fast Hamming distance calculation"""
         if not hash1 or not hash2:
@@ -1582,8 +782,10 @@ class OptimizedCardScanner:
             max_dist = getattr(self, 'quick_filter_max', 80)
         dist = self.hamming_distance(hash1, hash2)
         return dist <= max_dist
+
     
-    def scan_game(self, game_name, r_hash, g_hash, b_hash, threshold, found_exact, set_filter=None, foil_type_filter=None, rarity_filter=None):
+    def scan_game(self, game_name, r_hash, g_hash, b_hash, threshold, found_exact,
+                  set_filter=None, foil_type_filter=None, rarity_filter=None):
         """
         Scan a single game (runs in thread)
         Returns list of matches from this game
@@ -1603,35 +805,36 @@ class OptimizedCardScanner:
         table = game_info['table']
         
         try:
-            # Check cache first
+            # Always load pHash data from per-game pHash DB (no fallbacks)
             if game_name in self.hash_cache:
                 cards = self.hash_cache[game_name]
                 self.stats['cache_hits'] += 1
             else:
-                # Build optimized query selecting only needed columns
-                needed_cols = "product_id, name, number, r_phash, g_phash, b_phash, set_code, rarity, subTypeName, market_price, low_price"
-                if set_filter:
-                    placeholders = ','.join(['?' for _ in set_filter])
-                    try:
-                        query = f"SELECT {needed_cols} FROM {table} WHERE r_phash IS NOT NULL AND UPPER(set_code) IN ({placeholders})"
-                        rows = cursor.execute(query, [s.upper() for s in set_filter]).fetchall()
-                        colnames = [d[0] for d in cursor.description]
-                        cards = [dict(zip(colnames, row)) for row in rows]
-                    except sqlite3.OperationalError:
-                        cards = []
-                else:
-                    try:
-                        query = f"SELECT {needed_cols} FROM {table} WHERE r_phash IS NOT NULL"
-                        rows = cursor.execute(query).fetchall()
-                        colnames = [d[0] for d in cursor.description]
-                        cards = [dict(zip(colnames, row)) for row in rows]
-                    except sqlite3.OperationalError:
-                        cards = []
+                gid = str(game_info.get('id'))
+                phash_db = Path(__file__).parent / 'recognition_data' / f"phash_cards_{gid}.db"
+                if not phash_db.exists():
+                    return []
+                ph_conn = sqlite3.connect(str(phash_db))
+                ph_cur = ph_conn.cursor()
+                ph_cur.execute("PRAGMA table_info(cards)")
+                ph_cols = [r[1] for r in ph_cur.fetchall()]
+                wanted = [c for c in ('product_id', 'r_phash', 'g_phash', 'b_phash', 'grayscale_phash') if c in ph_cols]
+                if 'product_id' not in wanted:
+                    ph_conn.close()
+                    return []
+                ph_cur.execute(f"SELECT {', '.join(wanted)} FROM cards")
+                rows = ph_cur.fetchall()
+                ph_conn.close()
+                cards = [dict(zip(wanted, row)) for row in rows]
+                if self.cache_enabled:
+                    self.hash_cache[game_name] = cards
             
             # Scan cards with early termination
             match_count = 0
             max_matches_per_game = 50  # Stop after finding 50 good matches per game to speed up multi-game scans
             
+            candidate_ids = []
+            candidate_rows = []
             for card in cards:
                 if found_exact.is_set():
                     break  # Exact match found by another thread
@@ -1640,10 +843,12 @@ class OptimizedCardScanner:
                 if match_count >= max_matches_per_game:
                     break
 
-                # Card is a dict (from cache or direct query)
+                # Card is a dict (from pHash DB)
                 product_id = card.get('product_id')
-                name = card.get('name') or card.get('card_name') or 'Unknown'
-                number = card.get('number')
+                if product_id is not None:
+                    product_id = str(product_id)
+                name = 'Unknown'
+                number = None
                 if self.use_grayscale_phash:
                     gray = card.get('grayscale_phash')
                     card_r = gray
@@ -1653,26 +858,11 @@ class OptimizedCardScanner:
                     card_r = card.get('r_phash')
                     card_g = card.get('g_phash')
                     card_b = card.get('b_phash')
-                set_code = card.get('set_code') or card.get('set') or card.get('setCode')
-                rarity = card.get('rarity')
-                subTypeName = card.get('subTypeName') or card.get('sub_type_name') or card.get('subtype')
-                market_price = card.get('market_price') or card.get('price') or card.get('marketPrice')
-                low_price = card.get('low_price') or card.get('lowPrice') or card.get('lowprice')
-
-                # Apply set filter if using cache
-                if set_filter and game_name in self.hash_cache:
-                    if not set_code or set_code.upper() not in [s.upper() for s in set_filter]:
-                        continue
-
-                # Apply foil type filter
-                if foil_type_filter and subTypeName:
-                    if subTypeName not in foil_type_filter:
-                        continue
-
-                # Apply rarity filter
-                if rarity_filter and rarity:
-                    if rarity.upper() not in [r.upper() for r in rarity_filter]:
-                        continue
+                set_code = None
+                rarity = None
+                subTypeName = None
+                market_price = None
+                low_price = None
 
                 # Quick filter on R channel first (cheapest check)
                 if not self.quick_filter(r_hash, card_r, threshold * 3):
@@ -1698,7 +888,8 @@ class OptimizedCardScanner:
                     except Exception:
                         price_value = None
 
-                    matches.append({
+                    candidate_ids.append(product_id)
+                    candidate_rows.append({
                         'product_id': product_id,
                         'game': game_info['display_name'],
                         'name': name,
@@ -1721,6 +912,69 @@ class OptimizedCardScanner:
                         found_exact.set()
                         break
             
+            # Enrich candidates with unified metadata
+            meta_map = {}
+            if candidate_ids and table:
+                try:
+                    placeholders = ','.join(['?' for _ in candidate_ids])
+                    cur = cursor
+                    cur.execute(
+                        f"SELECT product_id, name, number, set_code, set_name, rarity, subTypeName, market_price, low_price, color "
+                        f"FROM {table} WHERE product_id IN ({placeholders})",
+                        candidate_ids
+                    )
+                    for row in cur.fetchall():
+                        meta_map[str(row[0])] = {
+                            'name': row[1],
+                            'number': row[2],
+                            'set_code': row[3],
+                            'set_name': row[4],
+                            'rarity': row[5],
+                            'subTypeName': row[6],
+                            'market_price': row[7],
+                            'low_price': row[8],
+                            'color': row[9]
+                        }
+                except Exception:
+                    meta_map = {}
+
+            for m in candidate_rows:
+                pid = m.get('product_id')
+                if pid is not None:
+                    pid = str(pid)
+                meta = meta_map.get(pid, {})
+                if meta:
+                    m['name'] = meta.get('name') or m['name']
+                    m['number'] = meta.get('number') or m['number']
+                    m['set'] = meta.get('set_code') or m.get('set')
+                    m['set_name'] = meta.get('set_name')
+                    m['rarity'] = meta.get('rarity') or m.get('rarity')
+                    m['foil_type'] = meta.get('subTypeName') or m.get('foil_type')
+                    if meta.get('color') is not None:
+                        m['color'] = meta.get('color')
+                    price_value = None
+                    try:
+                        if meta.get('market_price') is not None and float(meta.get('market_price')) > 0:
+                            price_value = float(meta.get('market_price'))
+                        elif meta.get('low_price') is not None and float(meta.get('low_price')) > 0:
+                            price_value = float(meta.get('low_price'))
+                    except Exception:
+                        price_value = m.get('market_price')
+                    m['market_price'] = price_value
+
+                # Apply filters after metadata
+                if set_filter and m.get('set'):
+                    if m.get('set').upper() not in [s.upper() for s in set_filter]:
+                        continue
+                if foil_type_filter and m.get('foil_type'):
+                    if m.get('foil_type') not in foil_type_filter:
+                        continue
+                if rarity_filter and m.get('rarity'):
+                    if m.get('rarity').upper() not in [r.upper() for r in rarity_filter]:
+                        continue
+
+                matches.append(m)
+
             self.stats['cards_checked'] += len(cards)
         
         except sqlite3.OperationalError:
@@ -1740,49 +994,13 @@ class OptimizedCardScanner:
         """
         start_time = time.time()
         
-        # Try vector search first (much faster than phash scan) - enabled by default
-        # Only skip if explicitly disabled AND filters applied that vector search doesn't support yet
-        use_vector_search = self.use_vector or (self.auto_vector_when_unfiltered and not set_filter and not foil_type_filter and not rarity_filter)
-        
-        if use_vector_search:
-            if self.vector_searcher is None:
-                try:
-                    self.vector_searcher = VectorSearcher(self.db_path, use_resnet50=self.use_resnet50)
-                    # Don't load all vectors upfront - let it lazy load or use HNSW index
-                except Exception as e:
-                    # Fail silently to phash-based method
-                    self.vector_searcher = None
-
-            if self.vector_searcher is not None:
-                start_v = time.time()
-                # Use game_filter if provided, otherwise determine from active_games if limited
-                game_filter_for_vec = game_filter
-                if game_filter_for_vec is None and len(self.active_games) == 1:
-                    game_filter_for_vec = self.active_games[0]
-                
-                # Use ResNet50 or phash-based search
-                if self.use_resnet50:
-                    vec_matches = self.vector_searcher.search_by_image(image, limit=top_n, game_filter=game_filter_for_vec)
-                else:
-                    # Compute phash hashes
-                    r_hash, g_hash, b_hash = self.compute_phash(image)
-                    vec_matches = self.vector_searcher.search_by_phashes(r_hash, g_hash, b_hash, limit=top_n, game_filter=game_filter_for_vec)
-                elapsed_v = time.time() - start_v
-                if vec_matches:
-                    # Map vec_matches to expected match dicts and return
-                    for m in vec_matches:
-                        # ensure keys expected by downstream code
-                        m.setdefault('game', m.get('game'))
-                        m.setdefault('name', m.get('name'))
-                        m.setdefault('number', m.get('number'))
-                    self.stats['scans'] += 1
-                    self.stats['total_time'] += elapsed_v
-                    return vec_matches[:top_n], elapsed_v
-        
-        # Fallback to phash-based scanning
+        # pHash-based scanning (vector/embedding disabled)
         # Compute phash if not already computed (ResNet50 path skips this)
         if not 'r_hash' in locals():
             r_hash, g_hash, b_hash = self.compute_phash(image)
+
+        # Optional MSER-based quality score
+        mser_score = self._compute_mser_score(image)
         
         # Event for early termination when exact match found
         found_exact = threading.Event()
@@ -1843,6 +1061,20 @@ class OptimizedCardScanner:
 
         all_matches = list(deduped.values())
         all_matches.sort(key=lambda x: x['distance'])
+
+        # Blend MSER into confidence as a total score
+        weight_mser = max(0.0, min(1.0, float(self.mser_weight)))
+        weight_phash = max(0.0, 1.0 - weight_mser)
+
+        for m in all_matches:
+            phash_conf = float(m.get('confidence', 0) or 0)
+            total_conf = (
+                phash_conf * weight_phash +
+                (mser_score or 0) * 100.0 * weight_mser
+            )
+            m['phash_confidence'] = phash_conf
+            m['mser_score'] = mser_score
+            m['confidence'] = total_conf
         
         # Update stats
         elapsed = time.time() - start_time
@@ -1979,15 +1211,7 @@ class OptimizedCardScanner:
     # =====================================================================
     # WEBCAM/REALTIME CAPTURE MODE
     # =====================================================================
-    
-    def run_realtime_mode(self, sorting_mode="color", threshold=1000000):
-            self.ser.close()
-            print("[+] Serial connection closed")
-    
-    # =====================================================================
-    # WEBCAM/REALTIME CAPTURE MODE
-    # =====================================================================
-    
+
     def run_realtime_mode(self, sorting_mode="color", threshold=1000000):
         """
         Run scanner in realtime webcam mode (phash-based identification)
@@ -2142,30 +1366,25 @@ class OptimizedCardScanner:
     
     def _find_card_contour(self, frame):
         """
-        Find card contour using ONLY the original detection pipeline.
-        If the original module is missing or raises an error, return None.
+        Find card contour using the internal detection pipeline.
         """
-        from pathlib import Path
-        import importlib.util
         try:
-            root = Path(__file__).parent
-            orig_path = root / 'Original recognition' / 'detection.py'
-            if not orig_path.exists():
-                return None
-            import sys
-            orig_dir = str((root / 'Original recognition').resolve())
-            sys.path.insert(0, orig_dir)
-            try:
-                spec = importlib.util.spec_from_file_location('orig_detection', str(orig_path))
-                orig = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(orig)
-                if hasattr(orig, 'find_card_contour'):
-                    return orig.find_card_contour(frame)
-            finally:
-                try:
-                    sys.path.remove(orig_dir)
-                except Exception:
-                    pass
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+            edges = cv2.Canny(blurred, 50, 150)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+            contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            best_contour = None
+            max_area = 0
+            for contour in contours:
+                approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
+                if len(approx) == 4:
+                    area = cv2.contourArea(approx)
+                    if area > 10000 and area > max_area:
+                        max_area = area
+                        best_contour = approx
+            return best_contour
         except Exception:
             return None
         return None
@@ -2176,52 +1395,14 @@ class OptimizedCardScanner:
         Returns card info dict or None
         """
         try:
-            # Use the original recognition pipeline for perspective correction
-            from pathlib import Path
-            import importlib.util
-
-            root = Path(__file__).parent
-            orig_dir = root / 'Original recognition'
-            det_path = orig_dir / 'detection.py'
-            cfg_path = orig_dir / 'config.py'
-
-            if not det_path.exists() or not cfg_path.exists():
-                # Fall back to internal implementation if originals missing
-                warped = self._get_perspective_corrected_card(frame, card_approx)
-            else:
-                # Load original detection and config modules
-                import sys
-                orig_dir_str = str(orig_dir.resolve())
-                sys.path.insert(0, orig_dir_str)
-                try:
-                    spec_det = importlib.util.spec_from_file_location('orig_detection', str(det_path))
-                    orig_det = importlib.util.module_from_spec(spec_det)
-                    spec_det.loader.exec_module(orig_det)
-
-                    spec_cfg = importlib.util.spec_from_file_location('orig_config', str(cfg_path))
-                    orig_cfg = importlib.util.module_from_spec(spec_cfg)
-                    spec_cfg.loader.exec_module(orig_cfg)
-                finally:
-                    try:
-                        sys.path.remove(orig_dir_str)
-                    except Exception:
-                        pass
-
-                # Call original perspective correction
-                if hasattr(orig_det, 'get_perspective_corrected_card'):
-                    warped = orig_det.get_perspective_corrected_card(frame, card_approx)
-                else:
-                    warped = self._get_perspective_corrected_card(frame, card_approx)
+            # Use the internal perspective correction
+            warped = self._get_perspective_corrected_card(frame, card_approx)
 
             if warped is None:
                 return None
 
-            # Crop using original WIDTH/HEIGHT when available (don't force a square)
-            try:
-                crop_w = int(getattr(orig_cfg, 'WIDTH', 745))
-                crop_h = int(getattr(orig_cfg, 'HEIGHT', 1043))
-            except Exception:
-                crop_w, crop_h = 745, 1043
+            # Crop using internal WIDTH/HEIGHT (don't force a square)
+            crop_w, crop_h = 745, 1043
 
             # Ensure we don't index out of bounds if the warped image is smaller
             h, w = warped.shape[:2]
@@ -2252,7 +1433,9 @@ class OptimizedCardScanner:
                 r_hash = g_hash = b_hash = None
 
             # Scan the card using existing scan path which computes pHash identically
-            matches, _ = self.scan_card(pil_image, threshold=10, top_n=1)
+            # Use current scanner threshold (GUI can update this live)
+            scan_threshold = getattr(self, 'scan_threshold', 40)
+            matches, _ = self.scan_card(pil_image, threshold=scan_threshold, top_n=3)
 
             if matches and len(matches) > 0:
                 return matches[0]
@@ -2271,10 +1454,12 @@ class OptimizedCardScanner:
             height = 1043
             
             # Get corner points
-            pts = card_approx.reshape(4, 2).astype(np.float32)
-            
-            # Order points: top-left, top-right, bottom-right, bottom-left
-            rect = self._order_points(pts)
+            pts = card_approx.reshape(4, 2)
+            pts = sorted(pts, key=lambda point: point[1])
+            top_two, bottom_two = pts[:2], pts[2:]
+            top_left, top_right = sorted(top_two, key=lambda point: point[0])
+            bottom_left, bottom_right = sorted(bottom_two, key=lambda point: point[0])
+            rect = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
             
             # Destination points
             dst = np.array([
@@ -2287,27 +1472,21 @@ class OptimizedCardScanner:
             # Get perspective transform
             M = cv2.getPerspectiveTransform(rect, dst)
             warped = cv2.warpPerspective(frame, M, (width, height))
+
+            # Rotate to portrait if needed
+            h, w = warped.shape[:2]
+            if w > h:
+                for _ in range(3):
+                    warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
+                    h, w = warped.shape[:2]
+                    if w <= h:
+                        break
             
             return warped
         
         except Exception as e:
             print(f"[!] Perspective correction error: {e}")
             return None
-    
-    @staticmethod
-    def _order_points(pts):
-        """Order points in clockwise order starting from top-left"""
-        rect = np.zeros((4, 2), dtype=np.float32)
-        
-        s = pts.sum(axis=1)
-        rect[0] = pts[np.argmin(s)]  # top-left
-        rect[2] = pts[np.argmax(s)]  # bottom-right
-        
-        diff = np.diff(pts, axis=1)
-        rect[1] = pts[np.argmin(diff)]  # top-right
-        rect[3] = pts[np.argmax(diff)]  # bottom-left
-        
-        return rect
     
     def _handle_unrecognized_card(self, display_frame, card_approx, reason="Unknown"):
         """Display unrecognized card with reason"""
@@ -2401,8 +1580,6 @@ def main():
     parser.add_argument('--baud-rate', type=int, default=9600, help='Serial baud rate (default: 9600)')
     parser.add_argument('--track-inventory', action='store_true', help='Enable inventory tracking (reject duplicates)')
     parser.add_argument('--interactive', action='store_true', help='Interactive mode with menus (like original scanner)')
-    parser.add_argument('--use-vector', action='store_true', help='Enable vector-search (in-memory) using phash-derived embeddings')
-    parser.add_argument('--use-resnet50', action='store_true', help='Use ResNet50 embeddings for vector search (requires resnet50_index.bin)')
     
     args = parser.parse_args()
     
@@ -2411,15 +1588,11 @@ def main():
     print("=" * 80)
     
     # Initialize with 8 worker threads
-    use_resnet50 = bool(getattr(args, 'use_resnet50', False))
-    use_vector = bool(args.use_vector) or use_resnet50
     scanner = OptimizedCardScanner(
         max_workers=8,
         cache_enabled=True,
         serial_port=args.serial_port,
         baud_rate=args.baud_rate,
-        use_vector=use_vector,
-        use_resnet50=use_resnet50,
     )
     
     # Enable inventory tracking if requested
@@ -2921,44 +2094,6 @@ def main():
             scanner.close()
             return
 
-    # Require explicit game selection when using vector search
-    if args.use_vector or args.use_resnet50:
-        # Determine selected game name
-        selected_game = None
-        if args.game and len(args.game) > 0:
-            # prefer resolved valid_games if present
-            try:
-                selected_game = valid_games[0]
-            except Exception:
-                # fallback: try matching first raw arg against available games
-                gf = args.game[0]
-                # numeric id?
-                try:
-                    gid = int(gf)
-                    for name, info in scanner.games.items():
-                        if info.get('id') == gid:
-                            selected_game = name
-                            break
-                except Exception:
-                    # match by name
-                    for name in scanner.games.keys():
-                        if gf.lower() in name.lower():
-                            selected_game = name
-                            break
-
-        if not selected_game:
-            print('\n[!] Vector search requires a specific game selection (use -g GAME).')
-            print('    Example: -g Magic  OR  -g 167')
-            scanner.close()
-            return
-
-        # Enable vector search for the selected game
-        ok = scanner.enable_vector_search(selected_game, use_resnet50=bool(args.use_resnet50))
-        if not ok:
-            print('[!] Failed to enable vector search; aborting')
-            scanner.close()
-            return
-    
     # Optionally preload cache for top games (uses ~500MB RAM)
     if args.cache:
         cache_games = ['Magic', 'Pokemon', 'YuGiOh']
