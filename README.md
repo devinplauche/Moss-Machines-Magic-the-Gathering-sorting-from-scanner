@@ -4,7 +4,11 @@
   <img src="Resources/Icon.png" width="500" />
 </p>
 
-Welcome to the Moss Machine project! This open-source initiative provides a comprehensive system for automating the sorting, recognition, and management of Trading Card Game (TCG) cards. The system supports **317 different card games** including Magic: The Gathering, Pokemon, Yu-Gi-Oh!, and many others.
+Welcome to the Moss Machine project! This open-source initiative provides a comprehensive system for automating the sorting, recognition, and management of Trading Card Game (TCG) cards.
+
+Current runtime note: `Current-version/optimized_scanner.py` is configured for **Magic: The Gathering only**.
+
+Project layout reference: see `docs/PROJECT_STRUCTURE.md` for the permanent vs one-time script organization.
 
 ---
 

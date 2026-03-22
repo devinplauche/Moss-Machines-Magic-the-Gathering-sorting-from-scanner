@@ -18,9 +18,6 @@ Usage
       [--overwrite]
 """
 import argparse
-import os
-import sys
-import glob
 import json
 from pathlib import Path
 
@@ -31,6 +28,75 @@ import numpy as np
 # ──────────────────────────────────────────────────────────────────────────────
 # Core trim logic
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _adaptive_foreground_mask(image: np.ndarray, white_threshold: int) -> np.ndarray:
+    """Build a foreground mask using paper-color distance + dark-pixel fallback.
+
+    The scanner paper color is estimated from image borders. Pixels that differ
+    from that color are treated as foreground even if they are near-white.
+    """
+    if image.ndim == 2:
+        work = image[:, :, None]
+    else:
+        work = image
+
+    h, w = work.shape[:2]
+
+    border_pixels = np.concatenate(
+        [
+            work[0, :, :],
+            work[h - 1, :, :],
+            work[:, 0, :],
+            work[:, w - 1, :],
+        ],
+        axis=0,
+    ).astype(np.int16)
+
+    paper_color = np.median(border_pixels, axis=0).astype(np.int16)
+    border_delta = np.max(np.abs(border_pixels - paper_color), axis=1)
+    adaptive_delta = int(np.percentile(border_delta, 80))
+    adaptive_delta = max(3, min(8, adaptive_delta))
+
+    pixel_delta = np.max(np.abs(work.astype(np.int16) - paper_color), axis=2)
+    non_paper = pixel_delta >= adaptive_delta
+
+    if image.ndim == 2:
+        dark_pixels = image < int(white_threshold)
+    else:
+        dark_pixels = np.any(image < int(white_threshold), axis=2)
+
+    foreground = (non_paper | dark_pixels).astype(np.uint8)
+
+    # Smooth small holes/noise before selecting the dominant foreground object.
+    kernel = np.ones((3, 3), dtype=np.uint8)
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, kernel)
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, kernel)
+
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(foreground, connectivity=8)
+    if num_labels <= 1:
+        return dark_pixels
+
+    best_label = 0
+    best_area = 0
+    for label in range(1, num_labels):
+        _x, _y, _cw, _ch, area = stats[label]
+        if area > best_area:
+            best_area = int(area)
+            best_label = label
+
+    if best_label == 0:
+        return dark_pixels
+
+    x, y, cw, ch, area = stats[best_label]
+
+    # Guardrail: if the dominant region is implausibly tiny, use classic logic.
+    min_area = 0.20 * float(w * h)
+    min_w = 0.40 * float(w)
+    min_h = 0.60 * float(h)
+    if area < min_area or cw < min_w or ch < min_h:
+        return dark_pixels
+
+    return labels == best_label
 
 def trim_white_background(image: np.ndarray, white_threshold: int = 244, padding: int = 6) -> tuple:
     """Return (cropped_image, crop_rect) where crop_rect = (x1, y1, x2, y2).
@@ -44,10 +110,7 @@ def trim_white_background(image: np.ndarray, white_threshold: int = 244, padding
 
     h, w = image.shape[:2]
 
-    if image.ndim == 2:
-        non_white = image < int(white_threshold)
-    else:
-        non_white = np.any(image < int(white_threshold), axis=2)
+    non_white = _adaptive_foreground_mask(image, white_threshold=white_threshold)
 
     ys, xs = np.where(non_white)
     if len(xs) == 0:
